@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import * as nbt from 'prismarine-nbt'
 import pako from 'pako'
 import './App.css'
 import { Buffer } from 'buffer'
+import LitematicViewer from './LitematicViewer'
 
 // Explicitly ensure Buffer is on window if not already there,
 // though the polyfill plugin should handle this.
@@ -26,8 +27,8 @@ function App() {
   const [originalNbt, setOriginalNbt] = useState<any | null>(null)
   const [fileName, setFileName] = useState<string>('edited.litematic')
   const [error, setError] = useState<string | null>(null)
-  const [jsonText, setJsonText] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [showJson, setShowJson] = useState(false)
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -36,7 +37,6 @@ function App() {
     setError(null)
     setMetadata(null)
     setOriginalNbt(null)
-    setJsonText('')
     setFileName(file.name)
     setLoading(true)
 
@@ -81,13 +81,6 @@ function App() {
 
       setMetadata(extractedMeta)
 
-      const simpleJson = JSON.stringify(parsed, (key, value) => {
-        if (typeof value === 'bigint') return value.toString() + 'n'
-        return value
-      }, 2)
-      
-      setJsonText(simpleJson)
-
     } catch (err: any) {
       console.error(err)
       setError(`Failed to parse file: ${err.message}`)
@@ -105,47 +98,29 @@ function App() {
     if (!originalNbt || !metadata) return
 
     try {
-      // 1. Create a deep clone or modify the original NBT object structure directly
-      // We need to match the exact structure expected by prismarine-nbt
-      // Root -> Metadata -> { Name, Author, Description, TimeModified }
-      
       const root = originalNbt.value
       
-      // Update Metadata fields
       if (!root.Metadata) {
         root.Metadata = { type: 'compound', value: {} }
       }
       
       const metaVal = root.Metadata.value
       
-      // Update fields, ensuring we preserve the NBT type structure
       metaVal.Name = { type: 'string', value: metadata.name }
       metaVal.Author = { type: 'string', value: metadata.author }
       metaVal.Description = { type: 'string', value: metadata.description }
       
-      // Update TimeModified to now
       const now = Date.now()
-      metaVal.TimeModified = { type: 'long', value: [Math.floor(now / 4294967296), now % 4294967296] } // simple split for long, or use BigInt if supported by lib writer
-
-      // Note: prismarine-nbt writer usually handles JS numbers or BigInts depending on version.
-      // Let's try passing BigInt directly if the parser produced BigInt, or arrays if it produced arrays.
-      // Based on parser output, let's see. The parser usually produces BigInt for longs in newer versions.
-      // Let's assume BigInt for now.
       metaVal.TimeModified = { type: 'long', value: BigInt(now) }
 
-
-      // 2. Write NBT to Buffer
       const newBuffer = nbt.writeUncompressed(originalNbt)
-
-      // 3. Gzip the buffer
       const compressed = pako.gzip(new Uint8Array(newBuffer))
 
-      // 4. Create Blob and Download
       const blob = new Blob([compressed], { type: 'application/octet-stream' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = fileName // Use original filename or modified one
+      a.download = fileName
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -155,6 +130,15 @@ function App() {
       console.error('Save failed:', err)
       setError(`Failed to save file: ${err.message}`)
     }
+  }
+
+  // Helper to format JSON for display
+  const getJsonText = () => {
+    if (!originalNbt) return ''
+    return JSON.stringify(originalNbt, (key, value) => {
+      if (typeof value === 'bigint') return value.toString() + 'n'
+      return value
+    }, 2)
   }
 
   return (
@@ -171,9 +155,20 @@ function App() {
       </div>
 
       {loading && <p>Parsing file...</p>}
-
       {error && <div className="error">{error}</div>}
 
+      {/* 3D Viewer Section */}
+      {originalNbt && !loading && (
+        <div className="viewer-section">
+          <h2>3D Preview</h2>
+          <Suspense fallback={<div>Loading 3D Scene...</div>}>
+            <LitematicViewer nbtData={originalNbt} />
+          </Suspense>
+          <p className="hint">Left click to rotate, Right click to pan, Scroll to zoom</p>
+        </div>
+      )}
+
+      {/* Metadata Editor Section */}
       {metadata && (
         <div className="metadata-card">
           <h2>File Metadata (Editable)</h2>
@@ -217,14 +212,22 @@ function App() {
         </div>
       )}
 
-      {jsonText && (
-        <div className="json-viewer">
-          <h3>Raw NBT Data Preview</h3>
-          <textarea 
-            readOnly 
-            value={jsonText} 
-            style={{ width: '100%', height: '400px', fontFamily: 'monospace' }}
-          />
+      {/* JSON Toggle */}
+      {originalNbt && (
+        <div style={{width: '100%', maxWidth: '800px', marginTop: '20px'}}>
+           <button onClick={() => setShowJson(!showJson)} style={{marginBottom: '10px'}}>
+             {showJson ? 'Hide Raw NBT Data' : 'Show Raw NBT Data'}
+           </button>
+           
+           {showJson && (
+            <div className="json-viewer">
+              <textarea 
+                readOnly 
+                value={getJsonText()} 
+                style={{ width: '100%', height: '400px', fontFamily: 'monospace' }}
+              />
+            </div>
+           )}
         </div>
       )}
     </div>
