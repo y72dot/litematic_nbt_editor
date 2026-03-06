@@ -1,6 +1,6 @@
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Stats, Grid } from '@react-three/drei'
-import { useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { Litematic } from './core/Litematic'
 import { isBlockVisible } from './utils/litematicParser' // Reusing visibility check for now
@@ -58,9 +58,29 @@ function SceneSetup({ center }: { center: [number, number, number] }) {
   return null
 }
 
+import { DeepslateContext } from './utils/deepslate/deepslateContext';
+import { getBlockGeometry } from './utils/deepslate/geometryGenerator';
+
 export default function LitematicViewer({ litematic, unpackingMethod, traversalOrder }: LitematicViewerProps) {
+  // Use state to trigger re-renders when resources load
+  const [resourceVersion, setResourceVersion] = useState(0);
+
+  // Initialize Deepslate context
+  useEffect(() => {
+      // Just ensure instance is created
+      DeepslateContext.getInstance();
+  }, []);
+
   // Extract regions and process geometry
-  const { instances, center } = useMemo(() => {
+  const { instances, center, geometries } = useMemo(() => {
+    // We need to group instances by geometry type (or block ID if simplified)
+    // For now, let's keep using BoxGeometry for everything to start, 
+    // but structure it to support multiple meshes.
+    
+    // Map: GeometryKey -> Instance[]
+    const instanceMap = new Map<string, { color: string, matrix: THREE.Matrix4, id: number }[]>();
+    
+    // ... (rest of logic)
     const instances: { color: string, matrix: THREE.Matrix4, id: number }[] = []
     let minX = Infinity, minY = Infinity, minZ = Infinity
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
@@ -73,6 +93,25 @@ export default function LitematicViewer({ litematic, unpackingMethod, traversalO
     
     // Iterate over all regions
     litematic.regions.forEach(region => {
+      // ... (existing logic)
+      
+      // We need to load resources for these blocks asynchronously.
+      // But useMemo is synchronous.
+      // So we will trigger resource loading here, and when done, update state to re-render.
+      const ctx = DeepslateContext.getInstance();
+      
+      // Collect unique blocks
+      const uniqueBlocks = new Set(region.palette);
+      uniqueBlocks.forEach(b => {
+          if (b && !b.includes('air')) {
+              ctx.loadBlock(b).then(() => {
+                  // This is a bit spammy, maybe debounce or check if loaded
+                  // setResourceVersion(v => v + 1);
+              });
+          }
+      });
+      
+      // ...
       console.log(`Processing Region: ${region.name} (Method: ${unpackingMethod}, Order: ${traversalOrder})`);
       
       // Apply debug settings

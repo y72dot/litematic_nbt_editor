@@ -15,6 +15,7 @@
     "@types/pako": "^2.0.4",
     "@types/three": "^0.183.1",
     "buffer": "^6.0.3",
+    "deepslate": "^0.25.1",
     "pako": "^2.1.0",
     "prismarine-nbt": "^2.8.0",
     "react": "^19.2.0",
