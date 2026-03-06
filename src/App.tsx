@@ -1,12 +1,14 @@
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import * as nbt from 'prismarine-nbt'
 import pako from 'pako'
 import './App.css'
 import { Buffer } from 'buffer'
-import LitematicViewer from './LitematicViewer'
+import LitematicViewer, { getBlockColor } from './LitematicViewer'
+import PaletteEditor from './PaletteEditor'
+import { Litematic } from './core/Litematic'
+import type { TraversalOrder } from './core/BlockStorage'
 
-// Explicitly ensure Buffer is on window if not already there,
-// though the polyfill plugin should handle this.
+// Explicitly ensure Buffer is on window if not already there
 if (typeof window !== 'undefined' && !window.Buffer) {
   window.Buffer = Buffer;
 }
@@ -24,11 +26,23 @@ interface LitematicMetadata {
 
 function App() {
   const [metadata, setMetadata] = useState<LitematicMetadata | null>(null)
-  const [originalNbt, setOriginalNbt] = useState<any | null>(null)
+  
+  // We keep the raw NBT for saving, and the Litematic object for viewing/editing
+  // Actually, we should probably make Litematic object the source of truth for saving too,
+  // but for now let's keep rawNbt as the "file" and litematicObj as the "view model".
+  // When saving, we might need to sync back.
+  // OR: Litematic object wraps the rawNbt, so modifying Litematic.rawNbt is enough?
+  // Yes, our Litematic class stores reference to rawNbt.
+  
+  const [litematicObj, setLitematicObj] = useState<Litematic | null>(null);
   const [fileName, setFileName] = useState<string>('edited.litematic')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showJson, setShowJson] = useState(false)
+  
+  // New state for unpacking method
+  const [unpackingMethod, setUnpackingMethod] = useState<'spanning' | 'non-spanning'>('non-spanning');
+  const [traversalOrder, setTraversalOrder] = useState<TraversalOrder>('YZX');
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -36,14 +50,13 @@ function App() {
 
     setError(null)
     setMetadata(null)
-    setOriginalNbt(null)
+    setLitematicObj(null)
     setFileName(file.name)
     setLoading(true)
 
     try {
       const arrayBuffer = await file.arrayBuffer()
       
-      // 1. Ungzip the file
       let buffer: Buffer;
       try {
         const unzipped = pako.ungzip(new Uint8Array(arrayBuffer))
@@ -53,15 +66,17 @@ function App() {
         buffer = Buffer.from(arrayBuffer)
       }
 
-      // 2. Parse NBT
       const { parsed } = await nbt.parse(buffer)
-      setOriginalNbt(parsed)
       console.log('Parsed NBT:', parsed)
 
-      // 3. Extract Metadata
+      // Initialize Core Model
+      const litematic = new Litematic(parsed);
+      setLitematicObj(litematic);
+      setUnpackingMethod(litematic.preferredFormat);
+
+      // Extract Metadata for UI
       const root = parsed.value as any
       const meta = root.Metadata?.value || {}
-      
       const enclosingSize = meta.EnclosingSize?.value || {}
       
       const extractedMeta: LitematicMetadata = {
@@ -94,11 +109,21 @@ function App() {
     setMetadata({ ...metadata, [field]: value })
   }
 
+  const handlePaletteUpdate = (newNbt: any) => {
+    // When palette updates, we need to refresh the Litematic object
+    // Since we are modifying the raw NBT in place (in PaletteEditor), 
+    // we can just trigger a re-render or recreate the wrapper.
+    // Ideally PaletteEditor should call a method on Litematic object.
+    // For now, let's just recreate the wrapper to be safe and trigger effects.
+    const newLitematic = new Litematic(newNbt);
+    setLitematicObj(newLitematic);
+  };
+
   const handleSave = () => {
-    if (!originalNbt || !metadata) return
+    if (!litematicObj || !metadata) return
 
     try {
-      const root = originalNbt.value
+      const root = litematicObj.rawNbt.value
       
       if (!root.Metadata) {
         root.Metadata = { type: 'compound', value: {} }
@@ -113,7 +138,7 @@ function App() {
       const now = Date.now()
       metaVal.TimeModified = { type: 'long', value: BigInt(now) }
 
-      const newBuffer = nbt.writeUncompressed(originalNbt)
+      const newBuffer = nbt.writeUncompressed(litematicObj.rawNbt)
       const compressed = pako.gzip(new Uint8Array(newBuffer))
 
       const blob = new Blob([compressed], { type: 'application/octet-stream' })
@@ -134,8 +159,8 @@ function App() {
 
   // Helper to format JSON for display
   const getJsonText = () => {
-    if (!originalNbt) return ''
-    return JSON.stringify(originalNbt, (key, value) => {
+    if (!litematicObj) return ''
+    return JSON.stringify(litematicObj.rawNbt, (key, value) => {
       if (typeof value === 'bigint') return value.toString() + 'n'
       return value
     }, 2)
@@ -157,20 +182,71 @@ function App() {
       {loading && <p>Parsing file...</p>}
       {error && <div className="error">{error}</div>}
 
-      {/* 3D Viewer Section */}
-      {originalNbt && !loading && (
-        <div className="viewer-section">
-          <h2>3D Preview</h2>
-          <Suspense fallback={<div>Loading 3D Scene...</div>}>
-            <LitematicViewer nbtData={originalNbt} />
-          </Suspense>
-          <p className="hint">Left click to rotate, Right click to pan, Scroll to zoom</p>
+      {/* Main Content Area: Split View */}
+      {litematicObj && !loading && (
+        <div className="main-content" style={{ display: 'flex', gap: '20px', width: '100%', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          
+          {/* Left: 3D Viewer */}
+          <div className="viewer-section" style={{ flex: '1', minWidth: '300px', maxWidth: '800px' }}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
+                <h2>3D Preview</h2>
+                
+                {/* Unpacking Method Switcher */}
+                <div style={{fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '5px'}}>
+                    <div>
+                        <label style={{marginRight: '10px'}}>Format:</label>
+                        <select 
+                            value={unpackingMethod} 
+                            onChange={(e) => setUnpackingMethod(e.target.value as any)}
+                            style={{padding: '4px'}}
+                        >
+                            <option value="non-spanning">1.16+ (Non-Spanning)</option>
+                            <option value="spanning">1.13-1.15 (Spanning)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style={{marginRight: '10px'}}>Order:</label>
+                        <select 
+                            value={traversalOrder} 
+                            onChange={(e) => setTraversalOrder(e.target.value as any)}
+                            style={{padding: '4px'}}
+                        >
+                            <option value="YZX">YZX (Standard)</option>
+                            <option value="XYZ">XYZ</option>
+                            <option value="YXZ">YXZ</option>
+                            <option value="XZY">XZY</option>
+                            <option value="ZXY">ZXY</option>
+                            <option value="ZYX">ZYX</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <Suspense fallback={<div>Loading 3D Scene...</div>}>
+              <LitematicViewer 
+                litematic={litematicObj} 
+                unpackingMethod={unpackingMethod} 
+                traversalOrder={traversalOrder}
+              />
+            </Suspense>
+            <p className="hint">Left click to rotate, Right click to pan, Scroll to zoom</p>
+          </div>
+
+          {/* Right: Palette Editor */}
+          <div className="palette-section" style={{ flex: '0 0 300px' }}>
+            <PaletteEditor 
+              nbtData={litematicObj.rawNbt} 
+              onUpdate={handlePaletteUpdate} 
+              getBlockColor={getBlockColor} 
+            />
+          </div>
+
         </div>
       )}
 
       {/* Metadata Editor Section */}
       {metadata && (
-        <div className="metadata-card">
+        <div className="metadata-card" style={{ marginTop: '20px' }}>
           <h2>File Metadata (Editable)</h2>
           <div className="form-group">
             <label>Name:</label>
@@ -213,7 +289,7 @@ function App() {
       )}
 
       {/* JSON Toggle */}
-      {originalNbt && (
+      {litematicObj && (
         <div style={{width: '100%', maxWidth: '800px', marginTop: '20px'}}>
            <button onClick={() => setShowJson(!showJson)} style={{marginBottom: '10px'}}>
              {showJson ? 'Hide Raw NBT Data' : 'Show Raw NBT Data'}

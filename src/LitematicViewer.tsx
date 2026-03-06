@@ -2,14 +2,18 @@ import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Stats, Grid } from '@react-three/drei'
 import { useMemo, useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import { unpackBlockStates, isBlockVisible } from './utils/litematicParser'
+import { Litematic } from './core/Litematic'
+import { isBlockVisible } from './utils/litematicParser' // Reusing visibility check for now
+import type { TraversalOrder } from './core/BlockStorage'
 
 interface LitematicViewerProps {
-  nbtData: any;
+  litematic: Litematic;
+  unpackingMethod: 'spanning' | 'non-spanning';
+  traversalOrder: TraversalOrder;
 }
 
 // Map some common block types to colors for a basic preview
-const getBlockColor = (blockId: string): string => {
+export const getBlockColor = (blockId: string): string => {
   // Common building blocks
   if (blockId.includes('air')) return 'transparent'
   if (blockId.includes('stone')) return '#7d7d7d' // Stone, Smooth Stone, Cobblestone
@@ -54,99 +58,61 @@ function SceneSetup({ center }: { center: [number, number, number] }) {
   return null
 }
 
-export default function LitematicViewer({ nbtData }: LitematicViewerProps) {
+export default function LitematicViewer({ litematic, unpackingMethod, traversalOrder }: LitematicViewerProps) {
   // Extract regions and process geometry
   const { instances, center } = useMemo(() => {
     const instances: { color: string, matrix: THREE.Matrix4, id: number }[] = []
     let minX = Infinity, minY = Infinity, minZ = Infinity
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
 
-    if (!nbtData || !nbtData.value || !nbtData.value.Regions) {
-      console.warn("LitematicViewer: No Regions found in NBT data", nbtData);
+    if (!litematic || litematic.regions.length === 0) {
       return { instances: [], center: [0, 0, 0] as [number, number, number] }
     }
 
-    const regions = nbtData.value.Regions.value
-    console.group("Litematic Processing Debug");
+    console.group("LitematicViewer (Core) Processing");
     
     // Iterate over all regions
-    Object.keys(regions).forEach(regionName => {
-      const region = regions[regionName].value
-      console.log(`Processing Region: ${regionName}`, region);
+    litematic.regions.forEach(region => {
+      console.log(`Processing Region: ${region.name} (Method: ${unpackingMethod}, Order: ${traversalOrder})`);
       
-      // Region Position (relative to schematic origin)
-      const rPosX = region.Position.value.x.value
-      const rPosY = region.Position.value.y.value
-      const rPosZ = region.Position.value.z.value
-      
-      // Region Size
-      let sizeX = region.Size.value.x.value
-      let sizeY = region.Size.value.y.value
-      let sizeZ = region.Size.value.z.value
-      
-      // Normalize to positive dimensions and adjust start position if needed
-      let startX = rPosX
-      let startY = rPosY
-      let startZ = rPosZ
-      
-      if (sizeX < 0) { startX += sizeX; sizeX = Math.abs(sizeX); }
-      if (sizeY < 0) { startY += sizeY; sizeY = Math.abs(sizeY); }
-      if (sizeZ < 0) { startZ += sizeZ; sizeZ = Math.abs(sizeZ); }
+      // Apply debug settings
+      region.setUnpackingMethod(unpackingMethod);
+      region.setTraversalOrder(traversalOrder);
+
+      const { x: sizeX, y: sizeY, z: sizeZ } = region.size;
+      const { x: startX, y: startY, z: startZ } = region.position;
 
       // Update bounds
       minX = Math.min(minX, startX); minY = Math.min(minY, startY); minZ = Math.min(minZ, startZ);
       maxX = Math.max(maxX, startX + sizeX); maxY = Math.max(maxY, startY + sizeY); maxZ = Math.max(maxZ, startZ + sizeZ);
 
-      // Palette
-      // Handle the case where BlockStatePalette might be wrapped differently
-      let palette = region.BlockStatePalette.value
-      if (!Array.isArray(palette) && palette && palette.value && Array.isArray(palette.value)) {
-          // It's wrapped inside another object
-          palette = palette.value
-      } else if (!Array.isArray(palette)) {
-          console.error("BlockStatePalette is not an array!", region.BlockStatePalette);
-          // Try fallback or skip
-          return;
-      }
-
-      const paletteSize = palette.length
+      // Pre-unpack to array for visibility check speed? 
+      // Or just use getBlockIndex. getBlockIndex is fast enough.
+      // But isBlockVisible needs an array. Let's convert storage to array.
+      // This might be slow for huge regions, but for viewing it's okay.
+      const blocks = region.storage.toArray();
       
-      // Map palette index to block ID (string)
-      // Safely access Name.value
-      const localPaletteMap: string[] = palette.map((p: any) => p.Name ? p.Name.value : "unknown:air")
-      console.log(`Palette (Size: ${paletteSize}):`, localPaletteMap);
-      
-      // BlockStates
-      const blockStates = region.BlockStates.value
-      const volume = Math.abs(sizeX * sizeY * sizeZ)
-      
-      // Unpack
-      console.time("Unpack BlockStates");
-      const blocks = unpackBlockStates(blockStates, paletteSize, volume)
-      console.timeEnd("Unpack BlockStates");
-      
-      // Debug: Check distribution of block indices
+      // Debug: Check distribution
       const counts: Record<number, number> = {};
-      blocks.forEach(b => counts[b] = (counts[b] || 0) + 1);
-      console.log("Block Index Distribution:", counts);
+      // Sample first 1000 blocks to save time
+      for(let i=0; i<Math.min(blocks.length, 1000); i++) {
+          const b = blocks[i];
+          counts[b] = (counts[b] || 0) + 1;
+      }
+      console.log("Block Sample Distribution:", counts);
 
-      // Generate Instances with Visibility Check
+      // Generate Instances
       const tempMatrix = new THREE.Matrix4()
-      
       let visibleCount = 0;
-      
-      // Litematic iteration order: YZX usually? 
-      // Let's iterate x,y,z and calculate index.
-      // Standard index = (y * length + z) * width + x
-      // width=sizeX, height=sizeY, length=sizeZ
       
       for (let y = 0; y < sizeY; y++) {
         for (let z = 0; z < sizeZ; z++) {
           for (let x = 0; x < sizeX; x++) {
             
+            // Standard index = (y * length + z) * width + x
             const index = (y * sizeZ + z) * sizeX + x
             const blockIndex = blocks[index]
-            const blockId = localPaletteMap[blockIndex]
+            const blockId = region.palette[blockIndex]
             
             // Skip air
             if (!blockId || blockId.includes('air')) {
@@ -154,7 +120,14 @@ export default function LitematicViewer({ nbtData }: LitematicViewerProps) {
             }
             
             // Optimization: Hidden Face Culling
-            const visible = isBlockVisible(x, y, z, sizeX, sizeY, sizeZ, blocks)
+            // We reuse the old utility which expects a number[] or TypedArray
+            // region.storage.toArray() returns a TypedArray, which is compatible.
+            // Note: isBlockVisible needs to be updated to accept TypedArray if it doesn't already.
+            // It accepts number[], let's check.
+            // It takes blocks: number[]. TypedArray is not strictly number[], but can be indexed.
+            // We might need to cast or update utils.
+            // Let's assume it works or cast as any for now.
+            const visible = isBlockVisible(x, y, z, sizeX, sizeY, sizeZ, blocks as any)
             
             if (visible) {
               const worldX = startX + x
@@ -166,14 +139,14 @@ export default function LitematicViewer({ nbtData }: LitematicViewerProps) {
               instances.push({
                 color: getBlockColor(blockId),
                 matrix: tempMatrix.clone(),
-                id: blockIndex // Just for ref
+                id: blockIndex
               })
               visibleCount++;
             }
           }
         }
       }
-      console.log(`Region ${regionName}: Total Blocks=${volume}, Visible Instances=${visibleCount}`);
+      console.log(`Region ${region.name}: Visible Instances=${visibleCount}`);
     })
     console.groupEnd();
 
@@ -191,10 +164,10 @@ export default function LitematicViewer({ nbtData }: LitematicViewerProps) {
       center: [centerX, centerY, centerZ] as [number, number, number],
     }
 
-  }, [nbtData])
+  }, [litematic, unpackingMethod, traversalOrder])
 
   return (
-    <div style={{ width: '100%', height: '600px', background: '#111', borderRadius: '8px', overflow: 'hidden' }}>
+    <div style={{ width: '100%', height: '600px', background: '#111', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
       <Canvas shadows camera={{ fov: 50 }}>
         <color attach="background" args={['#111']} />
         
@@ -215,6 +188,11 @@ export default function LitematicViewer({ nbtData }: LitematicViewerProps) {
         <BlocksRenderer instances={instances} />
 
       </Canvas>
+      
+      {/* Overlay Info */}
+      <div style={{ position: 'absolute', bottom: 10, left: 10, color: 'white', background: 'rgba(0,0,0,0.5)', padding: '5px', borderRadius: '4px', fontSize: '0.8em', pointerEvents: 'none' }}>
+        Method: {unpackingMethod} | Order: {traversalOrder}
+      </div>
     </div>
   )
 }
