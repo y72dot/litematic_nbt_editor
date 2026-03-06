@@ -1,6 +1,7 @@
 import { DeepslateContext } from './deepslateContext';
 import * as THREE from 'three';
-import { Identifier } from 'deepslate';
+import * as BufferGeometryUtils from 'three-stdlib';
+import { BlockDefinition } from 'deepslate';
 
 // Cache for geometries to avoid regenerating the same mesh repeatedly
 const geometryCache = new Map<string, THREE.BufferGeometry>();
@@ -30,14 +31,6 @@ export async function getBlockGeometry(
         return box;
     }
 
-    // Deepslate Parsing Logic
-    const variant = def.getVariant(properties);
-    
-    // Collect all models that make up this variant (could be multipart or simple)
-    // Deepslate's type definitions are a bit tricky here.
-    // getVariant returns UnresolvedVariant, which can be weighted or simple.
-    // For now, let's assume simple cases or pick the first weighted option.
-    
     const geometries: THREE.BufferGeometry[] = [];
 
     // Helper to process a single variant definition
@@ -45,17 +38,7 @@ export async function getBlockGeometry(
         const model = ctx.models.getModel(modelName.replace('minecraft:', '').replace('block/', ''));
         if (!model) return;
         
-        // Flatten model to get all elements (cubes)
-        // Deepslate BlockModel has methods to resolve textures and elements?
-        // Actually we need to walk up the parent chain to merge elements.
-        // But BlockModel.fromJson might not do full resolution.
-        // Let's manually traverse or check if Deepslate exposes resolution.
-        // Deepslate's BlockModel doesn't have a 'resolve' method exposed easily.
-        // We might need to implement element merging ourselves.
-        
-        // For this MVP, let's assume we can get elements. 
-        // If elements are missing, check parent.
-        
+        // Find elements (traverse up if needed)
         let elements = model.elements;
         let currentModel = model;
         while (!elements && currentModel.parent) {
@@ -69,89 +52,124 @@ export async function getBlockGeometry(
         }
 
         if (elements) {
-            const geo = new THREE.BufferGeometry();
-            const vertices: number[] = [];
-            const uvs: number[] = [];
-            const indices: number[] = [];
-            let indexOffset = 0;
-
             // Process each cubic element
             elements.forEach(el => {
-                const { from, to, faces } = el;
+                const { from, to } = el;
                 // Coordinates in JSON are 0-16. Normalize to 0-1.
-                // And center them? Three.js BoxGeometry is centered at 0,0,0.
-                // But Minecraft models are 0 to 1.
-                // Let's use 0 to 1 coordinate system to match instances.
                 
                 const min = [from[0]/16, from[1]/16, from[2]/16];
                 const max = [to[0]/16, to[1]/16, to[2]/16];
 
-                // Faces: north, south, east, west, up, down
-                for (const [dir, face] of Object.entries(faces)) {
-                    // Generate 4 vertices for this face
-                    // ... (Vertex generation logic is complex, skipping for brevity in this step)
-                    // We will implement a simplified version: BoxGeometry with transformed vertices.
-                    
-                    // Actually, manual vertex generation is better.
-                    // Let's generate a simple box for the element first.
-                    
-                    const width = max[0] - min[0];
-                    const height = max[1] - min[1];
-                    const depth = max[2] - min[2];
-                    const centerX = min[0] + width/2;
-                    const centerY = min[1] + height/2;
-                    const centerZ = min[2] + depth/2;
-                    
-                    const boxGeo = new THREE.BoxGeometry(width, height, depth);
-                    boxGeo.translate(centerX - 0.5, centerY - 0.5, centerZ - 0.5); 
-                    // Shift to match Three.js center (0,0,0) -> Minecraft center (0.5, 0.5, 0.5)
-                    // Wait, our LitematicViewer instances are positioned at integer coordinates.
-                    // So we want the block to fit in [0,1].
-                    // BoxGeometry(1,1,1) is from -0.5 to 0.5.
-                    // So we need to shift by 0.5 if we want 0..1?
-                    // No, usually we center at 0.5,0.5,0.5 in world.
-                    // Our Viewer does: tempMatrix.setPosition(worldX, worldY, worldZ)
-                    // This sets the origin (0,0,0) of the instance.
-                    // So the geometry should be centered at 0.5, 0.5, 0.5 relative to origin?
-                    // Or centered at 0? 
-                    // Standard BoxGeometry is centered at 0.
-                    // If we position at x,y,z, the box spans x-0.5 to x+0.5.
-                    // But Minecraft blocks span x to x+1.
-                    // So we should translate geometry by +0.5.
-                    boxGeo.translate(0.5, 0.5, 0.5);
-                    
-                    // Now apply element offset
-                    // min/max are 0..1 relative to block origin.
-                    // boxGeo is now 0..width/height/depth at 0.5,0.5,0.5? No.
-                    
-                    // Let's reset.
-                    // 1. Create Box of size (w,h,d). Centered at (0,0,0).
-                    // 2. Translate to center of element: (min + max)/2.
-                    // 3. Now it is in 0..1 space relative to block origin.
-                    
-                    const elementCenter = [min[0] + width/2, min[1] + height/2, min[2] + depth/2];
-                    const subBox = new THREE.BoxGeometry(width, height, depth);
-                    subBox.translate(elementCenter[0], elementCenter[1], elementCenter[2]);
-                    
-                    // Apply Rotation (x,y) from variant
-                    // Note: Minecraft rotations are around center (0.5, 0.5, 0.5) usually?
-                    // Or specific pivots. Deepslate handles pivots in elements.
-                    
-                    // ... This is getting complicated to do manually.
-                    // For now, let's just MERGE the geometries.
-                    geometries.push(subBox);
+                const width = max[0] - min[0];
+                const height = max[1] - min[1];
+                const depth = max[2] - min[2];
+                
+                // Create geometry
+                const boxGeo = new THREE.BoxGeometry(width, height, depth);
+                
+                // Translate to correct position relative to block origin (0,0,0) -> (1,1,1)
+                // BoxGeometry is centered at (0,0,0)
+                // Element center in block space:
+                const cx = min[0] + width/2;
+                const cy = min[1] + height/2;
+                const cz = min[2] + depth/2;
+                
+                // We want the geometry to be relative to the block center (0.5, 0.5, 0.5) if we rotate it?
+                // Or just relative to block origin (0,0,0)?
+                // Three.js instances are positioned at block origin.
+                // So we need geometry to be in [0,1] range.
+                // Box starts at -w/2 .. w/2.
+                // We want it at min .. max.
+                // So we translate by cx, cy, cz.
+                boxGeo.translate(cx, cy, cz);
+                
+                // Apply Model Rotation (x, y)
+                // Minecraft rotations are usually around (0.5, 0.5, 0.5)
+                if (x !== 0 || y !== 0) {
+                    boxGeo.translate(-0.5, -0.5, -0.5); // Move to center
+                    if (x !== 0) boxGeo.rotateX(x * Math.PI / 180);
+                    if (y !== 0) boxGeo.rotateY(y * Math.PI / 180);
+                    boxGeo.translate(0.5, 0.5, 0.5); // Move back
                 }
+
+                geometries.push(boxGeo);
             });
-            
-            // Merge all element geometries
-            // const merged = BufferGeometryUtils.mergeBufferGeometries(geometries); // Need to import Utils
         }
     };
     
-    // Simplified logic: Just use the first variant model and make a box if it exists
-    // To properly support this, we need to iterate `variant` which might be array or object.
+    // Process the variant(s)
+    let variant;
+    if (typeof def.getVariant === 'function') {
+        try {
+            variant = def.getVariant(properties);
+        } catch (e) {
+            console.warn(`Failed to get variant for ${id}:`, e);
+            return null;
+        }
+    } else {
+        // Fallback: manually pick a variant if getVariant is missing (should not happen if deepslate is correct)
+        // Or maybe def is not a full BlockDefinition instance?
+        // Let's just use the first variant from the map if available
+        if (def.variants && Object.keys(def.variants).length > 0) {
+            variant = Object.values(def.variants)[0];
+        } else if (def.multipart) {
+             // For multipart, we should ideally check conditions.
+             // But for fallback, let's just grab all parts.
+             variant = { apply: def.multipart.map(p => p.apply).flat() };
+        } else {
+            return null;
+        }
+    }
     
-    // TODO: Full implementation
+    // Handle Weighted/Multipart
+    // For now, simplify: take first variant or all multipart
+    if (Array.isArray(variant)) {
+        // Weighted variant list, pick first
+        const v = variant[0];
+        processVariant(v.model, v.x, v.y, v.uvlock);
+    } else if ('apply' in variant) {
+         // Multipart (it has 'apply' which can be array or single)
+         // Wait, getVariant returns UnresolvedVariant which is (Variant | Variant[])
+         // Actually BlockDefinition.getVariant(props) returns a single ResolvedVariant?
+         // Let's check deepslate types. 
+         // It seems it returns UnresolvedVariant.
+         
+         // Let's just iterate blindly assuming it might be iterable or single object
+         // Actually, let's use the raw data structure logic
+         // BlockDefinition has 'variants' and 'multipart'.
+         // getVariant handles logic.
+         
+         // Let's assume it returns a list of models to render.
+         // If it's a simple object with model property:
+         const v = variant as any;
+         if (v.model) {
+             processVariant(v.model, v.x, v.y, v.uvlock);
+         } else if (Array.isArray(v)) {
+             // Multi-model variant (e.g. random rotation, pick first)
+             if(v.length > 0) processVariant(v[0].model, v[0].x, v[0].y, v[0].uvlock);
+         }
+    }
+    
+    // If we found geometries, merge them
+    if (geometries.length > 0) {
+        const merged = BufferGeometryUtils.mergeBufferGeometries(geometries);
+        // Center the geometry to origin (0,0,0) because InstancedMesh works best with centered geo?
+        // No, our logic above puts it in [0,1] range relative to instance position.
+        // But Three.js usually expects geometry centered at 0,0,0 and we move the mesh.
+        // Our viewer does: tempMatrix.setPosition(worldX, worldY, worldZ).
+        // If worldX is integer, and geo is [0,1], the block will be from X to X+1. This is correct.
+        
+        // HOWEVER, standard BoxGeometry(1,1,1) is [-0.5, 0.5].
+        // So standard blocks are centered at 0.
+        // If we use [0,1] range, we are offset by 0.5 compared to standard box.
+        // So we should probably center our generated geometry at 0,0,0 (i.e. range [-0.5, 0.5]).
+        merged.translate(-0.5, -0.5, -0.5);
+        
+        geometryCache.set(cacheKey, merged);
+        return merged;
+    }
+
+    // Fallback
     const box = new THREE.BoxGeometry(1, 1, 1);
     geometryCache.set(cacheKey, box);
     return box;

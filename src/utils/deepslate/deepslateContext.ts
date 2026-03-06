@@ -1,4 +1,17 @@
-import { BlockDefinition, BlockModel, ModelStore, TextureAtlas } from 'deepslate';
+import { BlockDefinition, BlockModel, TextureAtlas } from 'deepslate';
+
+// Helper class to store models since ModelStore is not exported
+class ModelStore {
+    private models = new Map<string, BlockModel>();
+
+    getModel(name: string): BlockModel | undefined {
+        return this.models.get(name);
+    }
+
+    addModel(name: string, model: BlockModel) {
+        this.models.set(name, model);
+    }
+}
 
 // Use Misode's CDN for assets
 const ASSETS_BASE = 'https://raw.githubusercontent.com/misode/mcmeta/assets/assets/minecraft';
@@ -43,16 +56,20 @@ export class DeepslateContext {
         // 2. Load dependent models
         // We need to find all model paths referenced in the blockstate
         const modelPaths = new Set<string>();
-        Object.values(def.variants).forEach(variant => {
-           const models = Array.isArray(variant) ? variant : [variant];
-           models.forEach(m => modelPaths.add(m.model));
-        });
+        if (def.variants) {
+            Object.values(def.variants).forEach(variant => {
+               const models = Array.isArray(variant) ? variant : [variant];
+               models.forEach(m => modelPaths.add(m.model));
+            });
+        }
         
         // Also handle multipart
-        def.multipart?.forEach(part => {
-           const models = Array.isArray(part.apply) ? part.apply : [part.apply];
-           models.forEach(m => modelPaths.add(m.model));
-        });
+        if (def.multipart) {
+            def.multipart.forEach(part => {
+               const models = Array.isArray(part.apply) ? part.apply : [part.apply];
+               models.forEach(m => modelPaths.add(m.model));
+            });
+        }
 
         // 3. Fetch Models recursively
         for (const modelPath of modelPaths) {
