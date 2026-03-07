@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import * as nbt from 'prismarine-nbt'
 import pako from 'pako'
 import './App.css'
@@ -6,6 +6,8 @@ import { Buffer } from 'buffer'
 import LitematicViewer, { getBlockColor } from './LitematicViewer'
 import DeepslateViewer from './components/DeepslateViewer'
 import PaletteEditor from './PaletteEditor'
+import MenuBar from './components/MenuBar'
+import StatusBar from './components/StatusBar'
 import { Litematic } from './core/Litematic'
 import type { TraversalOrder } from './core/BlockStorage'
 
@@ -27,14 +29,6 @@ interface LitematicMetadata {
 
 function App() {
   const [metadata, setMetadata] = useState<LitematicMetadata | null>(null)
-  
-  // We keep the raw NBT for saving, and the Litematic object for viewing/editing
-  // Actually, we should probably make Litematic object the source of truth for saving too,
-  // but for now let's keep rawNbt as the "file" and litematicObj as the "view model".
-  // When saving, we might need to sync back.
-  // OR: Litematic object wraps the rawNbt, so modifying Litematic.rawNbt is enough?
-  // Yes, our Litematic class stores reference to rawNbt.
-  
   const [litematicObj, setLitematicObj] = useState<Litematic | null>(null);
   const [fileName, setFileName] = useState<string>('edited.litematic')
   const [error, setError] = useState<string | null>(null)
@@ -45,6 +39,12 @@ function App() {
   const [unpackingMethod, setUnpackingMethod] = useState<'spanning' | 'non-spanning'>('non-spanning');
   const [traversalOrder, setTraversalOrder] = useState<TraversalOrder>('YZX');
   const [useDeepslate, setUseDeepslate] = useState(true);
+
+  // Panel State
+  const [activeTab, setActiveTab] = useState<'metadata' | 'palette' | 'settings'>('metadata');
+  const [isMetadataExpanded, setIsMetadataExpanded] = useState(true);
+  const [isPaletteExpanded, setIsPaletteExpanded] = useState(true);
+  const [isSettingsExpanded, setIsSettingsExpanded] = useState(true);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -112,11 +112,6 @@ function App() {
   }
 
   const handlePaletteUpdate = (newNbt: any) => {
-    // When palette updates, we need to refresh the Litematic object
-    // Since we are modifying the raw NBT in place (in PaletteEditor), 
-    // we can just trigger a re-render or recreate the wrapper.
-    // Ideally PaletteEditor should call a method on Litematic object.
-    // For now, let's just recreate the wrapper to be safe and trigger effects.
     const newLitematic = new Litematic(newNbt);
     setLitematicObj(newLitematic);
   };
@@ -169,163 +164,232 @@ function App() {
   }
 
   return (
-    <div className="container">
-      <h1>Litematic Viewer & Editor</h1>
-      
-      <div className="upload-section">
-        <input 
-          type="file" 
-          accept=".litematic,.nbt,.schematic" 
-          onChange={handleFileUpload} 
+    <div className="studio-container">
+      {/* 1. Top Bar */}
+      <div className="top-bar" style={{padding: 0}}>
+        <div style={{padding: '0 15px', display: 'flex', alignItems: 'center', borderRight: '1px solid #111', height: '100%'}}>
+           <span className="top-bar-title" style={{margin: 0}}>Litematic Studio</span>
+        </div>
+        
+        <MenuBar 
+           onOpenFile={handleFileUpload}
+           onSaveFile={handleSave}
+           onReset={() => { setLitematicObj(null); setMetadata(null); setFileName('edited.litematic'); }}
+           onAbout={() => alert('Litematic Studio v1.0\nBy CYQ\nPowered by Deepslate & React')}
+           
+           useDeepslate={useDeepslate}
+           setUseDeepslate={setUseDeepslate}
+           unpackingMethod={unpackingMethod}
+           setUnpackingMethod={setUnpackingMethod}
+           traversalOrder={traversalOrder}
+           setTraversalOrder={setTraversalOrder}
+           
+           showJson={showJson}
+           setShowJson={setShowJson}
+           isPropertiesVisible={isMetadataExpanded || isPaletteExpanded || isSettingsExpanded}
+           toggleProperties={() => {
+              const anyVisible = isMetadataExpanded || isPaletteExpanded || isSettingsExpanded;
+              setIsMetadataExpanded(!anyVisible);
+              setIsPaletteExpanded(!anyVisible);
+              setIsSettingsExpanded(!anyVisible);
+           }}
+           
+           hasFile={!!litematicObj}
         />
-        <p>Upload a <code>.litematic</code> file to analyze and edit.</p>
+
+        {loading && <span style={{marginLeft: 'auto', marginRight: '15px', fontSize: '12px', color: '#aaa'}}>Processing...</span>}
+        {!loading && fileName && <span style={{marginLeft: 'auto', marginRight: '15px', fontSize: '12px', color: '#888'}}>{fileName}</span>}
       </div>
 
-      {loading && <p>Parsing file...</p>}
-      {error && <div className="error">{error}</div>}
-
-      {/* Main Content Area: Split View */}
-      {litematicObj && !loading && (
-        <div className="main-content" style={{ display: 'flex', gap: '20px', width: '100%', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      {/* 2. Main Workspace */}
+      <div className="workspace">
+        
+        {/* Center: Viewport */}
+        <div className="viewport-area">
+          {error && (
+            <div style={{position:'absolute', top: 20, left: 20, right: 20, padding: 10, background: '#522', border: '1px solid #f55', color: '#fff', zIndex: 100}}>
+              {error}
+            </div>
+          )}
           
-          {/* Left: 3D Viewer */}
-          <div className="viewer-section" style={{ flex: '1', minWidth: '300px', maxWidth: '800px' }}>
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
-                <h2>3D Preview</h2>
-                
-                {/* Unpacking Method Switcher */}
-                <div style={{fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '5px'}}>
-                    <div>
-                        <label style={{marginRight: '10px'}}>Renderer:</label>
-                        <select 
-                            value={useDeepslate ? 'deepslate' : 'three'} 
-                            onChange={(e) => setUseDeepslate(e.target.value === 'deepslate')}
-                            style={{padding: '4px'}}
-                        >
-                            <option value="deepslate">Deepslate (High Quality)</option>
-                            <option value="three">Simple (Three.js)</option>
-                        </select>
+          {!litematicObj && !loading && (
+             <div className="empty-state">
+               <div style={{fontSize: '48px', marginBottom: '20px'}}>🧊</div>
+               <h3>No Model Loaded</h3>
+               <p>Open a .litematic file to begin editing</p>
+               <label className="upload-btn-large">
+                  Select File
+                  <input 
+                    type="file" 
+                    accept=".litematic,.nbt,.schematic" 
+                    onChange={handleFileUpload}
+                    style={{display: 'none'}} 
+                  />
+               </label>
+             </div>
+          )}
+
+          {litematicObj && (
+             <>
+                {useDeepslate ? (
+                  <DeepslateViewer 
+                    litematic={litematicObj} 
+                    unpackingMethod={unpackingMethod}
+                  />
+                ) : (
+                  <LitematicViewer 
+                    litematic={litematicObj} 
+                    unpackingMethod={unpackingMethod} 
+                    traversalOrder={traversalOrder}
+                  />
+                )}
+                <div className="viewport-overlay-hint">
+                  LMB: Rotate | RMB: Pan | Scroll: Zoom | WASD+Space: Move
+                </div>
+             </>
+          )}
+        </div>
+
+        {/* Right: Side Panel */}
+        <div className="side-panel">
+          <div className="panel-header">
+            <span>Properties</span>
+          </div>
+          
+          <div className="panel-content">
+             {litematicObj && metadata ? (
+               <>
+                  {/* Section: Metadata */}
+                  <div className="panel-section">
+                    <div className="panel-section-title" onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}>
+                       <span>Metadata</span>
+                       <span>{isMetadataExpanded ? '▼' : '▶'}</span>
                     </div>
-                    {/* Only show unpacking options for Three.js viewer or if we want to debug logic globally */}
-                    {/* Actually DeepslateViewer also depends on Litematic parsing which uses these settings, so keep them visible */}
-                    <div>
-                        <label style={{marginRight: '10px'}}>Format:</label>
-                        <select 
+                    {isMetadataExpanded && (
+                      <div className="panel-section-body">
+                         <label className="studio-label">Name</label>
+                         <input className="studio-input" value={metadata.name} onChange={(e) => handleMetadataChange('name', e.target.value)} />
+                         
+                         <label className="studio-label">Author</label>
+                         <input className="studio-input" value={metadata.author} onChange={(e) => handleMetadataChange('author', e.target.value)} />
+                         
+                         <label className="studio-label">Description</label>
+                         <textarea className="studio-input" rows={3} value={metadata.description} onChange={(e) => handleMetadataChange('description', e.target.value)} />
+                         
+                         <div style={{fontSize: '11px', color: '#888', marginTop: '10px'}}>
+                            <div>Size: {typeof metadata.size === 'object' ? `${metadata.size.x} x ${metadata.size.y} x ${metadata.size.z}` : metadata.size}</div>
+                            <div>Regions: {metadata.regions}</div>
+                         </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Section: Palette */}
+                  <div className="panel-section">
+                    <div className="panel-section-title" onClick={() => setIsPaletteExpanded(!isPaletteExpanded)}>
+                       <span>Palette Editor</span>
+                       <span>{isPaletteExpanded ? '▼' : '▶'}</span>
+                    </div>
+                    {isPaletteExpanded && (
+                      <div className="panel-section-body" style={{padding: 0}}>
+                        <PaletteEditor 
+                          nbtData={litematicObj.rawNbt} 
+                          onUpdate={handlePaletteUpdate} 
+                          getBlockColor={getBlockColor} 
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Section: Settings */}
+                  <div className="panel-section">
+                    <div className="panel-section-title" onClick={() => setIsSettingsExpanded(!isSettingsExpanded)}>
+                       <span>Advanced Settings</span>
+                       <span>{isSettingsExpanded ? '▼' : '▶'}</span>
+                    </div>
+                    {isSettingsExpanded && (
+                      <div className="panel-section-body">
+                         <label className="studio-label">Block Unpacking Format</label>
+                         <select 
+                            className="studio-select"
                             value={unpackingMethod} 
                             onChange={(e) => setUnpackingMethod(e.target.value as any)}
-                            style={{padding: '4px'}}
-                        >
+                         >
                             <option value="non-spanning">1.16+ (Non-Spanning)</option>
                             <option value="spanning">1.13-1.15 (Spanning)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style={{marginRight: '10px'}}>Order:</label>
-                        <select 
+                         </select>
+                         
+                         <label className="studio-label" style={{marginTop: '10px'}}>Traversal Order</label>
+                         <select 
+                            className="studio-select"
                             value={traversalOrder} 
                             onChange={(e) => setTraversalOrder(e.target.value as any)}
-                            style={{padding: '4px'}}
-                        >
+                         >
                             <option value="YZX">YZX (Standard)</option>
                             <option value="XYZ">XYZ</option>
-                            <option value="YXZ">YXZ</option>
-                            <option value="XZY">XZY</option>
-                            <option value="ZXY">ZXY</option>
-                            <option value="ZYX">ZYX</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            
-            {useDeepslate ? (
-              <DeepslateViewer 
-                litematic={litematicObj} 
-                unpackingMethod={unpackingMethod}
-              />
-            ) : (
-              <LitematicViewer 
-                litematic={litematicObj} 
-                unpackingMethod={unpackingMethod} 
-                traversalOrder={traversalOrder}
-              />
-            )}
-            <p className="hint">Left click to rotate, Right click to pan, Scroll to zoom</p>
-          </div>
+                         </select>
 
-          {/* Right: Palette Editor */}
-          <div className="palette-section" style={{ flex: '0 0 300px' }}>
-            <PaletteEditor 
-              nbtData={litematicObj.rawNbt} 
-              onUpdate={handlePaletteUpdate} 
-              getBlockColor={getBlockColor} 
-            />
+                         <button 
+                            className="top-bar-btn" 
+                            style={{width: '100%', marginTop: '10px', border: '1px solid #555'}}
+                            onClick={() => setShowJson(!showJson)}
+                         >
+                            {showJson ? 'Hide Raw NBT' : 'Show Raw NBT'}
+                         </button>
+                      </div>
+                    )}
+                  </div>
+               </>
+             ) : (
+               <div style={{padding: '20px', textAlign: 'center', color: '#666', fontSize: '12px'}}>
+                  No active selection
+               </div>
+             )}
           </div>
-
+        </div>
+      </div>
+      
+      {/* Raw NBT Overlay */}
+      {showJson && litematicObj && (
+        <div style={{
+          position: 'absolute', 
+          top: '40px', left: 0, right: '320px', bottom: '24px', 
+          background: 'rgba(0,0,0,0.9)', 
+          zIndex: 50,
+          padding: '20px',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+           <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px', color: '#fff'}}>
+              <h3>Raw NBT Data</h3>
+              <button onClick={() => setShowJson(false)} className="top-bar-btn">Close</button>
+           </div>
+           <textarea 
+             readOnly 
+             value={getJsonText()} 
+             style={{ flex: 1, fontFamily: 'monospace', background: '#222', color: '#afa', border: 'none', padding: '10px' }}
+           />
         </div>
       )}
 
-      {/* Metadata Editor Section */}
-      {metadata && (
-        <div className="metadata-card" style={{ marginTop: '20px' }}>
-          <h2>File Metadata (Editable)</h2>
-          <div className="form-group">
-            <label>Name:</label>
-            <input 
-              type="text" 
-              value={metadata.name} 
-              onChange={(e) => handleMetadataChange('name', e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label>Author:</label>
-            <input 
-              type="text" 
-              value={metadata.author} 
-              onChange={(e) => handleMetadataChange('author', e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label>Description:</label>
-            <textarea 
-              value={metadata.description} 
-              onChange={(e) => handleMetadataChange('description', e.target.value)}
-              rows={3}
-            />
-          </div>
-          
-          <div className="read-only-info">
-            <ul>
-              <li><strong>Regions Count:</strong> {metadata.regions}</li>
-              <li><strong>Enclosing Size:</strong> {typeof metadata.size === 'object' ? `${metadata.size.x} x ${metadata.size.y} x ${metadata.size.z}` : metadata.size}</li>
-              <li><strong>Created:</strong> {metadata.timeCreated}</li>
-              <li><strong>Modified:</strong> {metadata.timeModified} (Will update on save)</li>
-            </ul>
-          </div>
-
-          <button className="save-button" onClick={handleSave}>
-            Save & Download .litematic
-          </button>
-        </div>
-      )}
-
-      {/* JSON Toggle */}
-      {litematicObj && (
-        <div style={{width: '100%', maxWidth: '800px', marginTop: '20px'}}>
-           <button onClick={() => setShowJson(!showJson)} style={{marginBottom: '10px'}}>
-             {showJson ? 'Hide Raw NBT Data' : 'Show Raw NBT Data'}
-           </button>
+      {/* 3. Status Bar */}
+      <div style={{ flex: '0 0 24px', zIndex: 100 }}>
+        <StatusBar 
+           loading={loading}
+           error={error}
+           statusMessage={litematicObj ? "Ready. Use WASD to move, Drag to rotate." : "Waiting for file..."}
            
-           {showJson && (
-            <div className="json-viewer">
-              <textarea 
-                readOnly 
-                value={getJsonText()} 
-                style={{ width: '100%', height: '400px', fontFamily: 'monospace' }}
-              />
-            </div>
-           )}
-        </div>
-      )}
+           hasFile={!!litematicObj}
+           regions={metadata?.regions || 0}
+           size={metadata?.size || null}
+           
+           useDeepslate={useDeepslate}
+           unpackingMethod={unpackingMethod}
+           traversalOrder={traversalOrder}
+        />
+      </div>
+
     </div>
   )
 }

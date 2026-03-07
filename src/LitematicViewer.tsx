@@ -167,7 +167,7 @@ export default function LitematicViewer({ litematic, unpackingMethod, traversalO
   }, [litematic, unpackingMethod, traversalOrder])
 
   return (
-    <div style={{ width: '100%', height: '600px', background: '#111', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', background: '#111', position: 'relative' }}>
       <Canvas shadows camera={{ fov: 50 }}>
         <color attach="background" args={['#111']} />
         

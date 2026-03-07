@@ -1,0 +1,87 @@
+.menu-bar {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  font-size: 13px;
+  user-select: none;
+}
+
+.menu-item {
+  position: relative;
+  padding: 0 10px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  cursor: default;
+  color: #ccc;
+  transition: background-color 0.1s;
+}
+
+.menu-item:hover, .menu-item.active {
+  background-color: #3e3e3e;
+  color: #fff;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: #2b2b2b;
+  border: 1px solid #111;
+  min-width: 200px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  z-index: 1000;
+  padding: 4px 0;
+  display: none;
+}
+
+.menu-item.active .dropdown-menu {
+  display: block;
+}
+
+.dropdown-item {
+  padding: 6px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #ddd;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dropdown-item:hover {
+  background-color: #3a5f85;
+  color: #fff;
+}
+
+.dropdown-item.disabled {
+  color: #666;
+  cursor: default;
+}
+
+.dropdown-item.disabled:hover {
+  background-color: transparent;
+}
+
+.dropdown-separator {
+  height: 1px;
+  background-color: #444;
+  margin: 4px 0;
+}
+
+.dropdown-icon {
+  width: 16px;
+  text-align: center;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.dropdown-shortcut {
+  font-size: 11px;
+  color: #888;
+  margin-left: 15px;
+}
+
+.dropdown-item:hover .dropdown-shortcut {
+  color: #ccc;
+}

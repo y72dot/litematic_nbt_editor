@@ -155,10 +155,15 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
 
   // Render Loop
   const pressedKeys = useRef<Set<string>>(new Set());
+  const isHovered = useRef(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+        // Only handle keys if mouse is hovering over the viewer
+        if (!isHovered.current) return;
+
         if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space', 'ShiftLeft'].includes(e.code)) {
+            e.preventDefault(); // Prevent scrolling (especially for Space)
             pressedKeys.current.add(e.code);
         }
     };
@@ -166,12 +171,21 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
         pressedKeys.current.delete(e.code);
     };
     
+    // Use non-passive listener for wheel to ensure we can prevent default scrolling
+    const handleWheelGlobal = (e: WheelEvent) => {
+        if (isHovered.current) {
+            e.preventDefault();
+        }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('wheel', handleWheelGlobal, { passive: false });
     
     return () => {
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
+        window.removeEventListener('wheel', handleWheelGlobal);
     };
   }, []);
 
@@ -276,7 +290,11 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
   }
 
   return (
-    <div style={{ width: '100%', height: '600px', background: '#333', position: 'relative' }}>
+    <div 
+      style={{ width: '100%', height: '100%', background: '#333', position: 'relative' }}
+      onMouseEnter={() => { isHovered.current = true; }}
+      onMouseLeave={() => { isHovered.current = false; pressedKeys.current.clear(); }}
+    >
       {loading && <div style={{position:'absolute', top: 20, left: 20, color: 'white'}}>Loading Resources...</div>}
       <canvas
         ref={canvasRef}
