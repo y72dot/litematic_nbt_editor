@@ -213,6 +213,7 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
     const handleWheelGlobal = (e: WheelEvent) => {
         if (isHovered.current) {
             e.preventDefault();
+            setViewDist(prev => Math.max(0.1, prev - e.deltaY * 0.001));
         }
     };
 
@@ -322,11 +323,6 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
     isDragging.current = false;
   };
   
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    setViewDist(prev => Math.max(0.1, prev - e.deltaY * 0.001));
-  }
-
   return (
     <div 
       style={{ width: '100%', height: '100%', background: '#333', position: 'relative' }}
@@ -341,7 +337,6 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
       />
       <div style={{position: 'absolute', bottom: 10, left: 10, color: '#aaa', fontSize: '0.8rem'}}>
         Deepslate Renderer | Drag to Rotate | Scroll to Zoom | WASD + Space/Shift to Move
