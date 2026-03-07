@@ -16,6 +16,7 @@
     "@types/three": "^0.183.1",
     "buffer": "^6.0.3",
     "deepslate": "^0.25.1",
+    "flexlayout-react": "^0.8.19",
     "gl-matrix": "^3.4.4",
     "pako": "^2.1.0",
     "prismarine-nbt": "^2.8.0",

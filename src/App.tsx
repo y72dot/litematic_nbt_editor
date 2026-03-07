@@ -2,50 +2,114 @@ import { useState, useRef } from 'react'
 import * as nbt from 'prismarine-nbt'
 import pako from 'pako'
 import './App.css'
+import 'flexlayout-react/style/dark.css' // Import FlexLayout dark theme
 import { Buffer } from 'buffer'
-import LitematicViewer, { getBlockColor } from './LitematicViewer'
-import DeepslateViewer from './components/DeepslateViewer'
-import PaletteEditor from './PaletteEditor'
+import { Layout, Model, Actions, DockLocation } from 'flexlayout-react'
+import type { TabNode, IJsonModel } from 'flexlayout-react'
+
+import { getBlockColor } from './LitematicViewer'
 import MenuBar from './components/MenuBar'
 import StatusBar from './components/StatusBar'
 import { Litematic } from './core/Litematic'
 import type { TraversalOrder } from './core/BlockStorage'
+import type { LitematicMetadata } from './types'
+
+// Panel Components
+import ViewerPanel from './components/panels/ViewerPanel'
+import MetadataPanel from './components/panels/MetadataPanel'
+import PalettePanel from './components/panels/PalettePanel'
+import SettingsPanel from './components/panels/SettingsPanel'
+import NbtPanel from './components/panels/NbtPanel'
 
 // Explicitly ensure Buffer is on window if not already there
 if (typeof window !== 'undefined' && !window.Buffer) {
   window.Buffer = Buffer;
 }
 
-interface LitematicMetadata {
-  name: string
-  author: string
-  description: string
-  regions: number
-  size: { x: number, y: number, z: number } | string
-  timeCreated: string
-  timeModified: string
-  enclosingSize: { x: number, y: number, z: number } | string
-}
+// --- Default Layout Configuration ---
+const defaultLayout: IJsonModel = {
+  global: {
+    tabEnableClose: true,
+    tabEnableRename: false,
+    tabSetEnableMaximize: true,
+  },
+  borders: [],
+  layout: {
+    type: 'row',
+    id: 'root',
+    weight: 100,
+    children: [
+      {
+        type: 'tabset',
+        weight: 70,
+        selected: 0,
+        children: [
+          {
+            type: 'tab',
+            name: '3D Viewer',
+            component: 'viewer',
+            enableClose: false, // Viewer should always be open
+          }
+        ]
+      },
+      {
+        type: 'row',
+        weight: 30,
+        children: [
+          {
+            type: 'tabset',
+            weight: 50,
+            children: [
+              {
+                type: 'tab',
+                name: 'Metadata',
+                component: 'metadata'
+              },
+              {
+                type: 'tab',
+                name: 'Palette',
+                component: 'palette'
+              }
+            ]
+          },
+          {
+            type: 'tabset',
+            weight: 50,
+            children: [
+              {
+                type: 'tab',
+                name: 'Settings',
+                component: 'settings'
+              },
+              {
+                type: 'tab',
+                name: 'Raw NBT',
+                component: 'nbt'
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+};
 
 function App() {
+  const [model] = useState(() => Model.fromJson(defaultLayout));
+  
+  // App State
   const [metadata, setMetadata] = useState<LitematicMetadata | null>(null)
   const [litematicObj, setLitematicObj] = useState<Litematic | null>(null);
   const [fileName, setFileName] = useState<string>('edited.litematic')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [showJson, setShowJson] = useState(false)
   
-  // New state for unpacking method
+  // Settings State
   const [unpackingMethod, setUnpackingMethod] = useState<'spanning' | 'non-spanning'>('non-spanning');
   const [traversalOrder, setTraversalOrder] = useState<TraversalOrder>('YZX');
   const [useDeepslate, setUseDeepslate] = useState(true);
 
-  // Panel State
-  const [activeTab, setActiveTab] = useState<'metadata' | 'palette' | 'settings'>('metadata');
-  const [isMetadataExpanded, setIsMetadataExpanded] = useState(true);
-  const [isPaletteExpanded, setIsPaletteExpanded] = useState(true);
-  const [isSettingsExpanded, setIsSettingsExpanded] = useState(true);
-
+  // File Handling
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -71,12 +135,10 @@ function App() {
       const { parsed } = await nbt.parse(buffer)
       console.log('Parsed NBT:', parsed)
 
-      // Initialize Core Model
       const litematic = new Litematic(parsed);
       setLitematicObj(litematic);
       setUnpackingMethod(litematic.preferredFormat);
 
-      // Extract Metadata for UI
       const root = parsed.value as any
       const meta = root.Metadata?.value || {}
       const enclosingSize = meta.EnclosingSize?.value || {}
@@ -121,11 +183,7 @@ function App() {
 
     try {
       const root = litematicObj.rawNbt.value
-      
-      if (!root.Metadata) {
-        root.Metadata = { type: 'compound', value: {} }
-      }
-      
+      if (!root.Metadata) root.Metadata = { type: 'compound', value: {} }
       const metaVal = root.Metadata.value
       
       metaVal.Name = { type: 'string', value: metadata.name }
@@ -154,14 +212,117 @@ function App() {
     }
   }
 
-  // Helper to format JSON for display
-  const getJsonText = () => {
-    if (!litematicObj) return ''
-    return JSON.stringify(litematicObj.rawNbt, (_key, value) => {
-      if (typeof value === 'bigint') return value.toString() + 'n'
-      return value
-    }, 2)
+  // Force update wrapper to re-render App when layout changes
+  const [, setTick] = useState(0);
+  const forceUpdate = () => setTick(t => t + 1);
+
+  // --- Layout Factory ---
+  const factory = (node: TabNode) => {
+    const component = node.getComponent();
+    
+    switch (component) {
+      case 'viewer':
+        return (
+          <ViewerPanel 
+            litematicObj={litematicObj}
+            loading={loading}
+            error={error}
+            onFileUpload={handleFileUpload}
+            useDeepslate={useDeepslate}
+            unpackingMethod={unpackingMethod}
+            traversalOrder={traversalOrder}
+          />
+        );
+      case 'metadata':
+        return <MetadataPanel metadata={metadata} onChange={handleMetadataChange} />;
+      case 'palette':
+        return (
+          <PalettePanel 
+            nbtData={litematicObj?.rawNbt} 
+            onUpdate={handlePaletteUpdate} 
+            getBlockColor={getBlockColor} 
+          />
+        );
+      case 'settings':
+        return (
+          <SettingsPanel 
+            unpackingMethod={unpackingMethod}
+            setUnpackingMethod={setUnpackingMethod}
+            traversalOrder={traversalOrder}
+            setTraversalOrder={setTraversalOrder}
+            useDeepslate={useDeepslate}
+            setUseDeepslate={setUseDeepslate}
+          />
+        );
+      case 'nbt':
+        return <NbtPanel litematicObj={litematicObj} />;
+      default:
+        return <div>Unknown Component</div>;
+    }
   }
+
+  // --- Menu Handlers ---
+  const togglePanel = (component: string, name: string) => {
+    // Attempt to find existing node
+    let existingNode: TabNode | null = null;
+    model.visitNodes((node) => {
+      if (node.getType() === 'tab' && node.getComponent() === component) {
+        existingNode = node as TabNode;
+      }
+    });
+
+    if (existingNode) {
+      // If it exists, close it (toggle behavior)
+      model.doAction(Actions.deleteTab((existingNode as TabNode).getId()));
+    } else {
+      // If not, add it
+      
+      // Smart Positioning: Try to add to an existing sidebar TabSet if possible
+      let targetNodeId = 'root';
+      let location = DockLocation.RIGHT;
+      
+      let bestTabSetId: string | null = null;
+      model.visitNodes((node) => {
+          if (node.getType() === 'tabset') {
+              // Check if this tabset contains any of our sidebar panels
+              const children = node.getChildren();
+              for (const child of children) {
+                  // FlexLayout types might need casting if getChildren returns generic nodes
+                  const comp = (child as TabNode).getComponent();
+                  if (['metadata', 'palette', 'settings', 'nbt'].includes(comp as string)) {
+                      bestTabSetId = node.getId();
+                      break;
+                  }
+              }
+          }
+      });
+
+      if (bestTabSetId) {
+          targetNodeId = bestTabSetId;
+          location = DockLocation.CENTER; // Add as a new tab in this set
+      }
+
+      model.doAction(Actions.addNode({
+          type: 'tab',
+          component: component,
+          name: name,
+          enableClose: true,
+      }, targetNodeId, location, -1));
+    }
+  };
+
+  const isPanelOpen = (component: string) => {
+     let isOpen = false;
+     model.visitNodes((node) => {
+       // Check if node exists in the tree and is a tab with matching component
+       // We do NOT check isVisible() because that only returns true for the actively selected tab
+       // We want to show the checkmark if the tab exists anywhere in the layout (even if in background)
+       if (node.getType() === 'tab' && node.getComponent() === component) {
+         isOpen = true;
+       }
+     });
+     return isOpen;
+  };
 
   return (
     <div className="studio-container">
@@ -184,15 +345,8 @@ function App() {
            traversalOrder={traversalOrder}
            setTraversalOrder={setTraversalOrder}
            
-           showJson={showJson}
-           setShowJson={setShowJson}
-           isPropertiesVisible={isMetadataExpanded || isPaletteExpanded || isSettingsExpanded}
-           toggleProperties={() => {
-              const anyVisible = isMetadataExpanded || isPaletteExpanded || isSettingsExpanded;
-              setIsMetadataExpanded(!anyVisible);
-              setIsPaletteExpanded(!anyVisible);
-              setIsSettingsExpanded(!anyVisible);
-           }}
+           togglePanel={togglePanel}
+           isPanelOpen={isPanelOpen}
            
            hasFile={!!litematicObj}
         />
@@ -201,177 +355,14 @@ function App() {
         {!loading && fileName && <span style={{marginLeft: 'auto', marginRight: '15px', fontSize: '12px', color: '#888'}}>{fileName}</span>}
       </div>
 
-      {/* 2. Main Workspace */}
-      <div className="workspace">
-        
-        {/* Center: Viewport */}
-        <div className="viewport-area">
-          {error && (
-            <div style={{position:'absolute', top: 20, left: 20, right: 20, padding: 10, background: '#522', border: '1px solid #f55', color: '#fff', zIndex: 100}}>
-              {error}
-            </div>
-          )}
-          
-          {!litematicObj && !loading && (
-             <div className="empty-state">
-               <div style={{fontSize: '48px', marginBottom: '20px'}}>🧊</div>
-               <h3>No Model Loaded</h3>
-               <p>Open a .litematic file to begin editing</p>
-               <label className="upload-btn-large">
-                  Select File
-                  <input 
-                    type="file" 
-                    accept=".litematic,.nbt,.schematic" 
-                    onChange={handleFileUpload}
-                    style={{display: 'none'}} 
-                  />
-               </label>
-             </div>
-          )}
-
-          {litematicObj && (
-             <>
-                {useDeepslate ? (
-                  <DeepslateViewer 
-                    litematic={litematicObj} 
-                    unpackingMethod={unpackingMethod}
-                  />
-                ) : (
-                  <LitematicViewer 
-                    litematic={litematicObj} 
-                    unpackingMethod={unpackingMethod} 
-                    traversalOrder={traversalOrder}
-                  />
-                )}
-                <div className="viewport-overlay-hint">
-                  LMB: Rotate | RMB: Pan | Scroll: Zoom | WASD+Space: Move
-                </div>
-             </>
-          )}
-        </div>
-
-        {/* Right: Side Panel */}
-        <div className="side-panel">
-          <div className="panel-header">
-            <span>Properties</span>
-          </div>
-          
-          <div className="panel-content">
-             {litematicObj && metadata ? (
-               <>
-                  {/* Section: Metadata */}
-                  <div className="panel-section">
-                    <div className="panel-section-title" onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}>
-                       <span>Metadata</span>
-                       <span>{isMetadataExpanded ? '▼' : '▶'}</span>
-                    </div>
-                    {isMetadataExpanded && (
-                      <div className="panel-section-body">
-                         <label className="studio-label">Name</label>
-                         <input className="studio-input" value={metadata.name} onChange={(e) => handleMetadataChange('name', e.target.value)} />
-                         
-                         <label className="studio-label">Author</label>
-                         <input className="studio-input" value={metadata.author} onChange={(e) => handleMetadataChange('author', e.target.value)} />
-                         
-                         <label className="studio-label">Description</label>
-                         <textarea className="studio-input" rows={3} value={metadata.description} onChange={(e) => handleMetadataChange('description', e.target.value)} />
-                         
-                         <div style={{fontSize: '11px', color: '#888', marginTop: '10px'}}>
-                            <div>Size: {typeof metadata.size === 'object' ? `${metadata.size.x} x ${metadata.size.y} x ${metadata.size.z}` : metadata.size}</div>
-                            <div>Regions: {metadata.regions}</div>
-                         </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Section: Palette */}
-                  <div className="panel-section">
-                    <div className="panel-section-title" onClick={() => setIsPaletteExpanded(!isPaletteExpanded)}>
-                       <span>Palette Editor</span>
-                       <span>{isPaletteExpanded ? '▼' : '▶'}</span>
-                    </div>
-                    {isPaletteExpanded && (
-                      <div className="panel-section-body" style={{padding: 0}}>
-                        <PaletteEditor 
-                          nbtData={litematicObj.rawNbt} 
-                          onUpdate={handlePaletteUpdate} 
-                          getBlockColor={getBlockColor} 
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Section: Settings */}
-                  <div className="panel-section">
-                    <div className="panel-section-title" onClick={() => setIsSettingsExpanded(!isSettingsExpanded)}>
-                       <span>Advanced Settings</span>
-                       <span>{isSettingsExpanded ? '▼' : '▶'}</span>
-                    </div>
-                    {isSettingsExpanded && (
-                      <div className="panel-section-body">
-                         <label className="studio-label">Block Unpacking Format</label>
-                         <select 
-                            className="studio-select"
-                            value={unpackingMethod} 
-                            onChange={(e) => setUnpackingMethod(e.target.value as any)}
-                         >
-                            <option value="non-spanning">1.16+ (Non-Spanning)</option>
-                            <option value="spanning">1.13-1.15 (Spanning)</option>
-                         </select>
-                         
-                         <label className="studio-label" style={{marginTop: '10px'}}>Traversal Order</label>
-                         <select 
-                            className="studio-select"
-                            value={traversalOrder} 
-                            onChange={(e) => setTraversalOrder(e.target.value as any)}
-                         >
-                            <option value="YZX">YZX (Standard)</option>
-                            <option value="XYZ">XYZ</option>
-                         </select>
-
-                         <button 
-                            className="top-bar-btn" 
-                            style={{width: '100%', marginTop: '10px', border: '1px solid #555'}}
-                            onClick={() => setShowJson(!showJson)}
-                         >
-                            {showJson ? 'Hide Raw NBT' : 'Show Raw NBT'}
-                         </button>
-                      </div>
-                    )}
-                  </div>
-               </>
-             ) : (
-               <div style={{padding: '20px', textAlign: 'center', color: '#666', fontSize: '12px'}}>
-                  No active selection
-               </div>
-             )}
-          </div>
-        </div>
+      {/* 2. Main Workspace (FlexLayout) */}
+      <div className="workspace" style={{position: 'relative'}}>
+         <Layout 
+            model={model} 
+            factory={factory} 
+            onModelChange={() => forceUpdate()} // Sync layout state with React state
+         />
       </div>
-      
-      {/* Raw NBT Overlay */}
-      {showJson && litematicObj && (
-        <div style={{
-          position: 'absolute', 
-          top: '40px', left: 0, right: '320px', bottom: '24px', 
-          background: 'rgba(0,0,0,0.9)', 
-          zIndex: 50,
-          padding: '20px',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-           <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px', color: '#fff'}}>
-              <h3>Raw NBT Data</h3>
-              <button onClick={() => setShowJson(false)} className="top-bar-btn">Close</button>
-           </div>
-           <textarea 
-             readOnly 
-             value={getJsonText()} 
-             style={{ flex: 1, fontFamily: 'monospace', background: '#222', color: '#afa', border: 'none', padding: '10px' }}
-           />
-        </div>
-      )}
 
       {/* 3. Status Bar */}
       <div style={{ flex: '0 0 24px', zIndex: 100 }}>

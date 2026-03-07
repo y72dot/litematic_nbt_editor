@@ -16,10 +16,8 @@ interface MenuBarProps {
   setTraversalOrder: (val: any) => void;
   
   // Window Settings
-  showJson: boolean;
-  setShowJson: (val: boolean) => void;
-  isPropertiesVisible: boolean;
-  toggleProperties: () => void;
+  togglePanel: (component: string, name: string) => void;
+  isPanelOpen: (component: string) => boolean;
 
   hasFile: boolean;
 }
@@ -141,13 +139,28 @@ export default function MenuBar(props: MenuBarProps) {
         <span>Window</span>
         {activeMenu === 'window' && (
           <div className="dropdown-menu">
-            <div className="dropdown-item" onClick={() => handleItemClick(props.toggleProperties)}>
-              <span className="dropdown-icon">{props.isPropertiesVisible ? '✓' : ''}</span>
-              <span>Properties Panel</span>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('metadata', 'Metadata'))}>
+              <span className="dropdown-icon">{props.isPanelOpen('metadata') ? '✓' : ''}</span>
+              <span>Metadata</span>
             </div>
-            <div className="dropdown-item" onClick={() => handleItemClick(() => props.setShowJson(!props.showJson))}>
-              <span className="dropdown-icon">{props.showJson ? '✓' : ''}</span>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('palette', 'Palette'))}>
+              <span className="dropdown-icon">{props.isPanelOpen('palette') ? '✓' : ''}</span>
+              <span>Palette Editor</span>
+            </div>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('settings', 'Settings'))}>
+              <span className="dropdown-icon">{props.isPanelOpen('settings') ? '✓' : ''}</span>
+              <span>Advanced Settings</span>
+            </div>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('nbt', 'Raw NBT'))}>
+              <span className="dropdown-icon">{props.isPanelOpen('nbt') ? '✓' : ''}</span>
               <span>Raw NBT Data</span>
+            </div>
+            
+            <div className="dropdown-separator"></div>
+            
+            <div className="dropdown-item disabled">
+              <span className="dropdown-icon">{props.isPanelOpen('viewer') ? '✓' : ''}</span>
+              <span>3D Viewer (Always Open)</span>
             </div>
           </div>
         )}
