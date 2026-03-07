@@ -20,10 +20,24 @@ export default function NbtPanel({ litematicObj }: NbtPanelProps) {
   }
 
   return (
-    <textarea 
-      readOnly 
-      value={getJsonText()} 
-      style={{ width: '100%', height: '100%', fontFamily: 'monospace', background: '#222', color: '#afa', border: 'none', padding: '10px', resize: 'none' }}
-    />
+    <div className="panel-section-body" style={{ height: '100%', overflow: 'hidden', padding: 0 }}>
+      <textarea 
+        readOnly 
+        value={getJsonText()} 
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          fontFamily: "'Consolas', 'Monaco', monospace", 
+          fontSize: '11px',
+          background: '#1e1e1e', 
+          color: '#9cdcfe', 
+          border: 'none', 
+          padding: '10px', 
+          resize: 'none',
+          outline: 'none',
+          lineHeight: '1.4'
+        }}
+      />
+    </div>
   );
 }
