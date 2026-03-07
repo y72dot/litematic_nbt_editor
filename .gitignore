@@ -25,3 +25,10 @@ dist-ssr
 *.litematic
 .refer/
 .trae/
+
+# Test scripts
+test_*.ts
+test_*.js
+test_*.cjs
+check_*.js
+check_*.cjs

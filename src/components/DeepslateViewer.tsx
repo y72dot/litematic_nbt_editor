@@ -32,6 +32,20 @@ function upperPowerOfTwo(x: number) {
   return x + 1;
 }
 
+// Check if a block model is geometrically a full 16x16x16 cube
+function isGeometricFullCube(model: any): boolean {
+  if (!model || !model.elements) return false;
+  
+  // Most full blocks have exactly one element covering the full range
+  if (model.elements.length === 1) {
+    const e = model.elements[0];
+    return e.from[0] === 0 && e.from[1] === 0 && e.from[2] === 0 &&
+           e.to[0] === 16 && e.to[1] === 16 && e.to[2] === 16;
+  }
+  
+  return false;
+}
+
 export default function DeepslateViewer({ litematic, unpackingMethod }: DeepslateViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<StructureRenderer | null>(null);
@@ -101,8 +115,32 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
         getTextureAtlas() { return textureAtlas.getTextureAtlas(); },
         getBlockFlags(id) {
           const name = id.toString();
+          let model = blockModels[name];
+          
+          // Try to find the model with 'block/' prefix if not found directly
+          // Most blocks have their models in the 'block/' namespace path
+          if (!model) {
+            const parts = name.split(':');
+            if (parts.length === 2) {
+              model = blockModels[`${parts[0]}:block/${parts[1]}`];
+            }
+          }
+          
+          // 1. Geometric Check: Is it a full 16x16x16 cube?
+          // This automatically handles fences, slabs, stairs, torches, etc.
+          // @ts-ignore - accessing private elements property
+          const isSolid = isGeometricFullCube(model);
+
+          // 2. Visual Check: Exclude full cubes that are transparent (Glass, Ice, Slime, etc.)
+          const isVisualTransparent = 
+            TRANSPARENT_BLOCKS.has(name) || 
+            name.includes('glass') || 
+            name.includes('ice') || 
+            name.includes('slime') || 
+            name.includes('honey');
+
           return {
-            opaque: OPAQUE_BLOCKS.has(name) || (!name.includes('glass') && !name.includes('leaves')),
+            opaque: isSolid && !isVisualTransparent,
             self_culling: !NON_SELF_CULLING.has(name),
             semi_transparent: TRANSPARENT_BLOCKS.has(name)
           };
