@@ -13,12 +13,11 @@ export default function PaletteEditor({ nbtData, onUpdate, getBlockColor }: Pale
   const [editValue, setEditValue] = useState('');
 
   // Extract all unique block types and their counts across all regions
-  const { paletteMap, blockCounts } = useMemo(() => {
-    const paletteMap: Record<string, string> = {}; // Current Block ID -> Original/Display Block ID
+  const { blockCounts } = useMemo(() => {
     const blockCounts: Record<string, number> = {};
 
     if (!nbtData || !nbtData.value || !nbtData.value.Regions) {
-      return { paletteMap: {}, blockCounts: {} };
+      return { blockCounts: {} };
     }
 
     const regions = nbtData.value.Regions.value;
@@ -26,33 +25,24 @@ export default function PaletteEditor({ nbtData, onUpdate, getBlockColor }: Pale
     Object.keys(regions).forEach(regionName => {
       const region = regions[regionName].value;
       
-      // Get Palette
-      let palette = region.BlockStatePalette.value;
-      if (!Array.isArray(palette) && palette && palette.value && Array.isArray(palette.value)) {
-        palette = palette.value;
-      } else if (!Array.isArray(palette)) {
-        return;
+      // Handle wrapped lists (similar to Region.ts)
+      let rawPalette = region.BlockStatePalette.value;
+      if (!Array.isArray(rawPalette) && rawPalette && rawPalette.value && Array.isArray(rawPalette.value)) {
+        rawPalette = rawPalette.value;
       }
-
-      // We need to count blocks to show usage
-      // But unpacking is expensive. For now, let's just list the palette entries.
-      // If we want counts, we'd need to pass unpacked blocks or unpack again.
-      // Since unpacking is done in Viewer, maybe we can lift that state up?
-      // For now, let's just show unique blocks in the palette.
-      // Actually, we can just iterate the palette array itself to see what blocks are available.
       
-      palette.forEach((p: any) => {
-        const name = p.Name ? p.Name.value : "unknown";
-        if (!blockCounts[name]) {
-          blockCounts[name] = 0;
-        }
-        // We can't easily know the count without unpacking BlockStates.
-        // Let's mark it as present.
-        blockCounts[name]++; 
-      });
+      if (Array.isArray(rawPalette)) {
+        rawPalette.forEach((p: any) => {
+          if (p.Name && p.Name.value) {
+            const name = p.Name.value;
+            blockCounts[name] = (blockCounts[name] || 0) + 1;
+            // We just store one example for now if needed
+          }
+        });
+      }
     });
 
-    return { paletteMap, blockCounts };
+    return { blockCounts };
   }, [nbtData]);
 
   const uniqueBlocks = Object.keys(blockCounts).sort();
@@ -82,10 +72,8 @@ export default function PaletteEditor({ nbtData, onUpdate, getBlockColor }: Pale
       let palette = region.BlockStatePalette.value;
       
       // Handle wrapped palette
-      let isWrapped = false;
       if (!Array.isArray(palette) && palette && palette.value && Array.isArray(palette.value)) {
         palette = palette.value;
-        isWrapped = true;
       }
 
       // Update palette entries

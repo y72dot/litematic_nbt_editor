@@ -8,6 +8,7 @@ export class Region {
   public size: { x: number, y: number, z: number };
   public position: { x: number, y: number, z: number };
   public palette: string[];
+  public fullPalette: { Name: string, Properties?: Record<string, string> }[];
   public storage: BlockStorage;
 
   constructor(name: string, rawRegionData: any, defaultMethod: 'spanning' | 'non-spanning' = 'non-spanning') {
@@ -42,6 +43,21 @@ export class Region {
     
     this.palette = Array.isArray(rawPalette) 
       ? rawPalette.map((p: any) => p.Name ? p.Name.value : "unknown")
+      : [];
+
+    this.fullPalette = Array.isArray(rawPalette)
+      ? rawPalette.map((p: any) => {
+          const props: Record<string, string> = {};
+          if (p.Properties && p.Properties.value) {
+            Object.entries(p.Properties.value).forEach(([key, val]: [string, any]) => {
+              props[key] = val.value;
+            });
+          }
+          return {
+            Name: p.Name ? p.Name.value : "unknown",
+            Properties: Object.keys(props).length > 0 ? props : undefined
+          };
+        })
       : [];
 
     // Initialize Storage

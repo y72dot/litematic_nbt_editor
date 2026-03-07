@@ -1,9 +1,10 @@
-import { useState, Suspense, useEffect } from 'react'
+import { useState } from 'react'
 import * as nbt from 'prismarine-nbt'
 import pako from 'pako'
 import './App.css'
 import { Buffer } from 'buffer'
 import LitematicViewer, { getBlockColor } from './LitematicViewer'
+import DeepslateViewer from './components/DeepslateViewer'
 import PaletteEditor from './PaletteEditor'
 import { Litematic } from './core/Litematic'
 import type { TraversalOrder } from './core/BlockStorage'
@@ -43,6 +44,7 @@ function App() {
   // New state for unpacking method
   const [unpackingMethod, setUnpackingMethod] = useState<'spanning' | 'non-spanning'>('non-spanning');
   const [traversalOrder, setTraversalOrder] = useState<TraversalOrder>('YZX');
+  const [useDeepslate, setUseDeepslate] = useState(true);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -160,7 +162,7 @@ function App() {
   // Helper to format JSON for display
   const getJsonText = () => {
     if (!litematicObj) return ''
-    return JSON.stringify(litematicObj.rawNbt, (key, value) => {
+    return JSON.stringify(litematicObj.rawNbt, (_key, value) => {
       if (typeof value === 'bigint') return value.toString() + 'n'
       return value
     }, 2)
@@ -194,6 +196,19 @@ function App() {
                 {/* Unpacking Method Switcher */}
                 <div style={{fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '5px'}}>
                     <div>
+                        <label style={{marginRight: '10px'}}>Renderer:</label>
+                        <select 
+                            value={useDeepslate ? 'deepslate' : 'three'} 
+                            onChange={(e) => setUseDeepslate(e.target.value === 'deepslate')}
+                            style={{padding: '4px'}}
+                        >
+                            <option value="deepslate">Deepslate (High Quality)</option>
+                            <option value="three">Simple (Three.js)</option>
+                        </select>
+                    </div>
+                    {/* Only show unpacking options for Three.js viewer or if we want to debug logic globally */}
+                    {/* Actually DeepslateViewer also depends on Litematic parsing which uses these settings, so keep them visible */}
+                    <div>
                         <label style={{marginRight: '10px'}}>Format:</label>
                         <select 
                             value={unpackingMethod} 
@@ -222,13 +237,18 @@ function App() {
                 </div>
             </div>
             
-            <Suspense fallback={<div>Loading 3D Scene...</div>}>
+            {useDeepslate ? (
+              <DeepslateViewer 
+                litematic={litematicObj} 
+                unpackingMethod={unpackingMethod}
+              />
+            ) : (
               <LitematicViewer 
                 litematic={litematicObj} 
                 unpackingMethod={unpackingMethod} 
                 traversalOrder={traversalOrder}
               />
-            </Suspense>
+            )}
             <p className="hint">Left click to rotate, Right click to pan, Scroll to zoom</p>
           </div>
 

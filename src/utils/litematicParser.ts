@@ -25,15 +25,7 @@ export function unpackBlockStates(
   paletteSize: number, 
   volume: number
 ): number[] {
-  // 1. Normalize input to BigInt64Array or Array<BigInt>
-  // NBT parsers might return different things. Prismarine-nbt usually returns an array of BigInts for LongArrays.
-  // But sometimes it might be a specialized object.
-  
-  let states: BigInt[] = [];
-  
-  if (Array.isArray(packedStates)) {
-      states = packedStates.map(v => BigInt(v));
-  } else if (packedStates instanceof BigInt64Array) {
+  if (packedStates instanceof BigInt64Array) {
       // Convert to regular array of BigInts for easier handling, or keep as typed array
       // Let's keep as typed array if possible, but for mapping let's just use a loop.
       // Actually, let's just use the loop directly on the input.
