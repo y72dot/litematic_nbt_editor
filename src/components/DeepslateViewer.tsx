@@ -305,8 +305,6 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
             const projMatrix = mat4.create();
             mat4.perspective(projMatrix, fieldOfView, aspect, zNear, zFar);
             
-            lineRendererRef.current.drawAxes(view, projMatrix);
-            
             const sSize = structureSizeRef.current;
             lineRendererRef.current.drawBox(
               view, 
@@ -315,6 +313,9 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
               [sSize[0], sSize[1], sSize[2]], 
               [1, 1, 0] // Yellow box
             );
+
+            // Draw axes AFTER the box, with bias, to ensure they appear on top
+            lineRendererRef.current.drawAxes(view, projMatrix, 1000);
         }
       }
       requestRef.current = requestAnimationFrame(animate);

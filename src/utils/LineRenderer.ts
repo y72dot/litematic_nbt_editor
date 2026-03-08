@@ -6,9 +6,15 @@ attribute vec3 a_position;
 attribute vec3 a_color;
 uniform mat4 u_view;
 uniform mat4 u_proj;
+// Add bias uniform to push geometry towards camera to avoid z-fighting
+uniform float u_depthBias; 
 varying vec3 v_color;
 void main() {
-    gl_Position = u_proj * u_view * vec4(a_position, 1.0);
+    vec4 pos = u_proj * u_view * vec4(a_position, 1.0);
+    // Apply depth bias in NDC space (-1 to 1)
+    // A negative bias pulls vertices closer to the near plane
+    pos.z += u_depthBias * pos.w;
+    gl_Position = pos;
     v_color = a_color;
 }
 `;
@@ -31,6 +37,7 @@ export class LineRenderer {
     private a_color: number;
     private u_view: WebGLUniformLocation;
     private u_proj: WebGLUniformLocation;
+    private u_depthBias: WebGLUniformLocation;
 
     constructor(gl: WebGLRenderingContext) {
         this.gl = gl;
@@ -53,6 +60,7 @@ export class LineRenderer {
         this.a_color = gl.getAttribLocation(this.program, 'a_color');
         this.u_view = gl.getUniformLocation(this.program, 'u_view')!;
         this.u_proj = gl.getUniformLocation(this.program, 'u_proj')!;
+        this.u_depthBias = gl.getUniformLocation(this.program, 'u_depthBias')!;
 
         // Create Buffers
         this.positionBuffer = gl.createBuffer()!;
@@ -69,11 +77,11 @@ export class LineRenderer {
         return shader;
     }
 
-    public drawAxes(viewMatrix: mat4, projMatrix: mat4, length: number = 10) {
+    public drawAxes(viewMatrix: mat4, projMatrix: mat4, length: number = 1000) {
         const positions: number[] = [
-            0, 0, 0,  length, 0, 0, // X
-            0, 0, 0,  0, length, 0, // Y
-            0, 0, 0,  0, 0, length  // Z
+            -length, 0, 0,  length, 0, 0, // X
+            0, -length, 0,  0, length, 0, // Y
+            0, 0, -length,  0, 0, length  // Z
         ];
         
         const colors: number[] = [
@@ -82,7 +90,9 @@ export class LineRenderer {
             0, 0, 1,  0, 0, 1  // Blue
         ];
 
-        this.draw(viewMatrix, projMatrix, positions, colors);
+        // Use a small negative bias to pull axes towards the camera
+        // so they render on top of co-planar geometry like the grid or box
+        this.draw(viewMatrix, projMatrix, positions, colors, -0.0001);
     }
 
     public drawBox(viewMatrix: mat4, projMatrix: mat4, min: vec3, max: vec3, color: vec3) {
@@ -118,7 +128,7 @@ export class LineRenderer {
         this.draw(viewMatrix, projMatrix, positions, colors);
     }
 
-    private draw(viewMatrix: mat4, projMatrix: mat4, positions: number[], colors: number[]) {
+    private draw(viewMatrix: mat4, projMatrix: mat4, positions: number[], colors: number[], depthBias: number = 0) {
         const gl = this.gl;
 
         gl.useProgram(this.program);
@@ -138,6 +148,7 @@ export class LineRenderer {
         // Set Uniforms
         gl.uniformMatrix4fv(this.u_view, false, viewMatrix);
         gl.uniformMatrix4fv(this.u_proj, false, projMatrix);
+        gl.uniform1f(this.u_depthBias, depthBias);
 
         // Draw
         gl.drawArrays(gl.LINES, 0, positions.length / 3);
