@@ -57,10 +57,15 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
   const requestRef = useRef<number>(0);
   const structureSizeRef = useRef<[number, number, number]>([0, 0, 0]);
 
-  // Camera State
-  const [viewDist, setViewDist] = useState(4);
-  const [rotation, setRotation] = useState({ x: 0.5, y: 0.8 });
-  const cameraPos = useRef<vec3>(vec3.create());
+  // Camera State - World Position & Euler Angles
+  const cameraPos = useRef<vec3>(vec3.fromValues(0, 0, 0));
+  const cameraFront = useRef<vec3>(vec3.fromValues(0, 0, -1));
+  const cameraUp = useRef<vec3>(vec3.fromValues(0, 1, 0));
+  
+  // Yaw: rotation around Y axis (horizontal)
+  // Pitch: rotation around X axis (vertical)
+  const [cameraRotation, setCameraRotation] = useState({ yaw: -90, pitch: 0 }); // Degrees
+  const [moveSpeed, setMoveSpeed] = useState(1.0);
   
   // Load Resources
   useEffect(() => {
@@ -190,10 +195,42 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
     rendererRef.current = renderer;
     lineRendererRef.current = new LineRenderer(gl);
     
-    // Reset Camera
+    // Initialize Camera to Isometric View
     const size = structure.getSize();
     structureSizeRef.current = [size[0], size[1], size[2]];
-    vec3.set(cameraPos.current, 0, -size[1] * 1.5, -size[2] * 2);
+    
+    const maxDim = Math.max(size[0], size[1], size[2]);
+    const dist = maxDim * 2.0; // Distance multiplier
+
+    // Position at [dist, dist, dist] looking at [0, 0, 0] (or center)
+    // To look at center of model:
+    // const centerX = size[0] / 2;
+    // const centerY = size[1] / 2;
+    // const centerZ = size[2] / 2;
+    
+    // But user requested "look at origin", so we position relative to origin
+    vec3.set(cameraPos.current, dist, dist, dist);
+
+    // Calculate initial Yaw/Pitch to look at origin [0,0,0] from [dist,dist,dist]
+    // Direction vector = normalize(0 - pos) = normalize([-1, -1, -1])
+    // Yaw = atan2(dir.z, dir.x)
+    // Pitch = asin(dir.y)
+    
+    const dir = vec3.create();
+    vec3.sub(dir, [0, 0, 0], cameraPos.current);
+    vec3.normalize(dir, dir);
+
+    // Convert direction vector to Euler angles (degrees)
+    const yawRad = Math.atan2(dir[2], dir[0]);
+    const pitchRad = Math.asin(dir[1]);
+
+    setCameraRotation({
+        yaw: yawRad * (180 / Math.PI),
+        pitch: pitchRad * (180 / Math.PI)
+    });
+    
+    // Initial movement speed relative to model size
+    setMoveSpeed(maxDim / 20); // Move 1/20th of model size per frame base speed
 
   }, [litematic, loading, unpackingMethod]);
 
@@ -219,7 +256,13 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
     const handleWheelGlobal = (e: WheelEvent) => {
         if (isHovered.current) {
             e.preventDefault();
-            setViewDist(prev => Math.max(0.1, prev - e.deltaY * 0.001));
+            // Scroll to adjust movement speed or FOV? Let's do movement speed for now
+            // Or move forward/backward like a zoom
+            const zoomSpeed = moveSpeed * 5;
+            const forward = vec3.create();
+            vec3.copy(forward, cameraFront.current);
+            vec3.scale(forward, forward, -Math.sign(e.deltaY) * zoomSpeed);
+            vec3.add(cameraPos.current, cameraPos.current, forward);
         }
     };
 
@@ -232,49 +275,65 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
         window.removeEventListener('keyup', handleKeyUp);
         window.removeEventListener('wheel', handleWheelGlobal);
     };
-  }, []);
+  }, [moveSpeed]); // Dependency on moveSpeed
 
   useEffect(() => {
     const animate = () => {
-      // Handle Keys
+      // Calculate Front Vector from Rotation
+      const yawRad = cameraRotation.yaw * Math.PI / 180;
+      const pitchRad = cameraRotation.pitch * Math.PI / 180;
+      
+      const front = vec3.create();
+      front[0] = Math.cos(yawRad) * Math.cos(pitchRad);
+      front[1] = Math.sin(pitchRad);
+      front[2] = Math.sin(yawRad) * Math.cos(pitchRad);
+      vec3.normalize(front, front);
+      vec3.copy(cameraFront.current, front);
+
+      // Handle Keys (Movement)
       if (pressedKeys.current.size > 0) {
-        const speed = 0.05 * (16 / Math.max(1, viewDist)); // Adjust speed based on zoom
+        const speed = moveSpeed * 0.5; // Frame speed multiplier
         const move = vec3.create();
         
-        // Forward/Backward (W/S) - Relative to camera yaw
+        // Front/Back
         if (pressedKeys.current.has('KeyW')) {
-            const forward = vec3.fromValues(0, 0, speed);
-            vec3.rotateY(forward, forward, [0, 0, 0], -rotation.y);
-            vec3.add(move, move, forward);
+            const f = vec3.create();
+            vec3.scale(f, cameraFront.current, speed);
+            vec3.add(cameraPos.current, cameraPos.current, f);
         }
         if (pressedKeys.current.has('KeyS')) {
-            const backward = vec3.fromValues(0, 0, -speed);
-            vec3.rotateY(backward, backward, [0, 0, 0], -rotation.y);
-            vec3.add(move, move, backward);
+            const f = vec3.create();
+            vec3.scale(f, cameraFront.current, -speed);
+            vec3.add(cameraPos.current, cameraPos.current, f);
         }
 
-        // Left/Right (A/D) - Relative to camera yaw
+        // Left/Right (Strafe)
+        const right = vec3.create();
+        vec3.cross(right, cameraFront.current, cameraUp.current);
+        vec3.normalize(right, right);
+
         if (pressedKeys.current.has('KeyA')) {
-            const left = vec3.fromValues(speed, 0, 0);
-            vec3.rotateY(left, left, [0, 0, 0], -rotation.y);
-            vec3.add(move, move, left);
+            const r = vec3.create();
+            vec3.scale(r, right, -speed);
+            vec3.add(cameraPos.current, cameraPos.current, r);
         }
         if (pressedKeys.current.has('KeyD')) {
-            const right = vec3.fromValues(-speed, 0, 0);
-            vec3.rotateY(right, right, [0, 0, 0], -rotation.y);
-            vec3.add(move, move, right);
+            const r = vec3.create();
+            vec3.scale(r, right, speed);
+            vec3.add(cameraPos.current, cameraPos.current, r);
         }
 
-        // Up/Down (Space/Shift) - Absolute vertical
+        // Up/Down (World Y)
         if (pressedKeys.current.has('Space')) {
-            vec3.add(move, move, [0, -speed, 0]); 
+            const u = vec3.fromValues(0, 1, 0);
+            vec3.scale(u, u, speed);
+            vec3.add(cameraPos.current, cameraPos.current, u);
         }
         if (pressedKeys.current.has('ShiftLeft')) {
-             vec3.add(move, move, [0, speed, 0]);
+             const u = vec3.fromValues(0, 1, 0);
+             vec3.scale(u, u, -speed);
+             vec3.add(cameraPos.current, cameraPos.current, u);
         }
-        
-        // Apply to camera
-        vec3.add(cameraPos.current, cameraPos.current, move);
       }
 
       if (rendererRef.current && canvasRef.current) {
@@ -288,11 +347,11 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
            rendererRef.current.setViewport(0, 0, displayWidth, displayHeight);
         }
 
+        // View Matrix (LookAt)
         const view = mat4.create();
-        mat4.rotateX(view, view, rotation.x);
-        mat4.rotateY(view, view, rotation.y);
-        mat4.translate(view, view, cameraPos.current);
-        mat4.scale(view, view, [viewDist/4, viewDist/4, viewDist/4]); // Zoom
+        const target = vec3.create();
+        vec3.add(target, cameraPos.current, cameraFront.current);
+        mat4.lookAt(view, cameraPos.current, target, cameraUp.current);
 
         rendererRef.current.drawStructure(view);
         rendererRef.current.drawGrid(view);
@@ -323,7 +382,7 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
     
     requestRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(requestRef.current);
-  }, [rotation, viewDist]);
+  }, [cameraRotation, moveSpeed]);
 
   // Mouse Controls
   const isDragging = useRef(false);
@@ -339,10 +398,19 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
     const dx = e.clientX - lastMouse.current.x;
     const dy = e.clientY - lastMouse.current.y;
     
-    setRotation(prev => ({
-      x: Math.max(-Math.PI/2, Math.min(Math.PI/2, prev.x + dy * 0.01)),
-      y: prev.y + dx * 0.01
-    }));
+    // Sensitivity
+    const sensitivity = 0.2;
+
+    setCameraRotation(prev => {
+        let newYaw = prev.yaw + dx * sensitivity;
+        let newPitch = prev.pitch - dy * sensitivity;
+
+        // Clamp Pitch to avoid gimbal lock
+        if (newPitch > 89.0) newPitch = 89.0;
+        if (newPitch < -89.0) newPitch = -89.0;
+
+        return { yaw: newYaw, pitch: newPitch };
+    });
     
     lastMouse.current = { x: e.clientX, y: e.clientY };
   };
