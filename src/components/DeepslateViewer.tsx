@@ -46,12 +46,16 @@ function isGeometricFullCube(model: any): boolean {
   return false;
 }
 
+import { LineRenderer } from '../utils/LineRenderer';
+
 export default function DeepslateViewer({ litematic, unpackingMethod }: DeepslateViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<StructureRenderer | null>(null);
+  const lineRendererRef = useRef<LineRenderer | null>(null);
   const resourcesRef = useRef<Resources & ItemRendererResources | null>(null);
   const [loading, setLoading] = useState(true);
   const requestRef = useRef<number>(0);
+  const structureSizeRef = useRef<[number, number, number]>([0, 0, 0]);
 
   // Camera State
   const [viewDist, setViewDist] = useState(4);
@@ -184,9 +188,11 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
     );
     
     rendererRef.current = renderer;
+    lineRendererRef.current = new LineRenderer(gl);
     
     // Reset Camera
     const size = structure.getSize();
+    structureSizeRef.current = [size[0], size[1], size[2]];
     vec3.set(cameraPos.current, 0, -size[1] * 1.5, -size[2] * 2);
 
   }, [litematic, loading, unpackingMethod]);
@@ -289,6 +295,27 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
         mat4.scale(view, view, [viewDist/4, viewDist/4, viewDist/4]); // Zoom
 
         rendererRef.current.drawStructure(view);
+        rendererRef.current.drawGrid(view);
+
+        if (lineRendererRef.current) {
+            const fieldOfView = 70 * Math.PI / 180;
+            const aspect = canvasRef.current.clientWidth / canvasRef.current.clientHeight;
+            const zNear = 0.1;
+            const zFar = 500.0;
+            const projMatrix = mat4.create();
+            mat4.perspective(projMatrix, fieldOfView, aspect, zNear, zFar);
+            
+            lineRendererRef.current.drawAxes(view, projMatrix);
+            
+            const sSize = structureSizeRef.current;
+            lineRendererRef.current.drawBox(
+              view, 
+              projMatrix, 
+              [0, 0, 0], 
+              [sSize[0], sSize[1], sSize[2]], 
+              [1, 1, 0] // Yellow box
+            );
+        }
       }
       requestRef.current = requestAnimationFrame(animate);
     };
