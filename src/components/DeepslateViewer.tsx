@@ -55,7 +55,7 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
   const lineRendererRef = useRef<LineRenderer | null>(null);
   const structureRef = useRef<any>(null); // Store structure for raycasting
   
-  const { highlightedBlock, updateRaycastProps, onRaycastMouseMove, onRaycastMouseLeave } = useBlockRaycast();
+  const { getHighlightBlock, onRaycastMouseMove, onRaycastMouseLeave } = useBlockRaycast();
 
   const resourcesRef = useRef<Resources & ItemRendererResources | null>(null);
   const [loading, setLoading] = useState(true);
@@ -370,7 +370,8 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
             const projMatrix = mat4.create();
             mat4.perspective(projMatrix, fieldOfView, aspect, zNear, zFar);
             
-            // Update Raycaster Props
+            // Update Raycaster Props - REMOVED, now using direct method
+            /*
             updateRaycastProps({
                 structure: structureRef.current,
                 canvas: canvasRef.current,
@@ -379,6 +380,7 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
                 cameraPos: cameraPos.current,
                 cameraFront: cameraFront.current
             });
+            */
 
             const sSize = structureSizeRef.current;
             lineRendererRef.current.drawBox(
@@ -389,13 +391,20 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
               [1, 1, 0] // Yellow box
             );
 
-            // Draw Highlighted Block
-            if (highlightedBlock) {
+            // Real-time Raycasting
+            const hit = getHighlightBlock(
+                structureRef.current,
+                canvasRef.current,
+                view,
+                projMatrix
+            );
+
+            if (hit) {
                 lineRendererRef.current.drawBox(
                     view,
                     projMatrix,
-                    [highlightedBlock.position[0], highlightedBlock.position[1], highlightedBlock.position[2]],
-                    [highlightedBlock.position[0] + 1, highlightedBlock.position[1] + 1, highlightedBlock.position[2] + 1],
+                    [hit.position[0], hit.position[1], hit.position[2]],
+                    [hit.position[0] + 1, hit.position[1] + 1, hit.position[2] + 1],
                     [1, 1, 1] // White highlight
                 );
             }

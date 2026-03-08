@@ -1,43 +1,27 @@
-import { useCallback, useRef, useState } from 'react';
-import { mat4, vec3 } from 'gl-matrix';
+import { useCallback, useRef } from 'react';
+import { mat4 } from 'gl-matrix';
 import { Structure } from 'deepslate';
 import { Raycaster, type RaycastResult } from '../utils/Raycaster';
 
-interface UseBlockRaycastProps {
-    structure: Structure | null;
-    canvas: HTMLCanvasElement | null;
-    viewMatrix: mat4 | null;
-    projMatrix: mat4 | null;
-    cameraPos: vec3;
-    cameraFront: vec3;
-}
-
 export function useBlockRaycast() {
-    const [highlightedBlock, setHighlightedBlock] = useState<RaycastResult | null>(null);
-    
-    // We use a ref for the latest props to avoid re-creating the event handler constantly
-    const propsRef = useRef<UseBlockRaycastProps>({
-        structure: null,
-        canvas: null,
-        viewMatrix: null,
-        projMatrix: null,
-        cameraPos: vec3.create(),
-        cameraFront: vec3.create(),
-    });
+    // Store mouse position in a Ref, not State
+    // { x: clientX, y: clientY }
+    const mousePosRef = useRef<{ x: number, y: number } | null>(null);
 
-    const updateProps = (props: UseBlockRaycastProps) => {
-        propsRef.current = props;
-    };
-
-    const handleMouseMove = useCallback((e: React.MouseEvent) => {
-        const { structure, canvas, viewMatrix, projMatrix, cameraPos } = propsRef.current;
-
-        if (!structure || !canvas || !viewMatrix || !projMatrix) return;
+    // This method is called every frame inside requestAnimationFrame
+    const getHighlightBlock = useCallback((
+        structure: Structure | null,
+        canvas: HTMLCanvasElement | null,
+        viewMatrix: mat4,
+        projMatrix: mat4
+    ): RaycastResult | null => {
+        const mousePos = mousePosRef.current;
+        if (!mousePos || !structure || !canvas) return null;
 
         // Get ray from screen coordinates
         const ray = Raycaster.getRayFromScreen(
-            e.clientX,
-            e.clientY,
+            mousePos.x,
+            mousePos.y,
             canvas,
             viewMatrix,
             projMatrix
@@ -54,8 +38,7 @@ export function useBlockRaycast() {
             // Get block at position
             const block = structure.getBlock([x, y, z]);
             
-            // Consider air blocks as non-solid (or any other logic you want)
-            // 'minecraft:air', 'minecraft:cave_air', 'minecraft:void_air'
+            // Consider air blocks as non-solid
             // Defensive check for block.getName
             if (!block) return false;
             
@@ -65,13 +48,6 @@ export function useBlockRaycast() {
             } else if ((block as any).name) {
                 blockName = (block as any).name;
             } else {
-                // If we can't determine the name, assume it's solid unless it's null/undefined
-                // But for safety, let's log once if needed, or just proceed
-                // console.warn('Unknown block structure:', block);
-                // For now, let's assume if it exists, it's a block. 
-                // However, structure.getBlock usually returns null for air in some impls, 
-                // but deepslate usually returns a block state for air.
-                
                 // Fallback: try to coerce to string
                 blockName = String(block);
             }
@@ -85,34 +61,20 @@ export function useBlockRaycast() {
 
         // Trace the ray
         // Max distance 100 blocks
-        // console.log('Tracing ray from', cameraPos, 'dir', ray.direction);
-        const result = Raycaster.traceRay(ray.origin, ray.direction, 100, isBlockSolid);
+        // Using ray.origin (on near plane) is correct for perspective projection
+        return Raycaster.traceRay(ray.origin, ray.direction, 100, isBlockSolid);
+    }, []);
 
-        if (result) {
-            // Only update state if the block position changed to avoid excessive re-renders
-            setHighlightedBlock(prev => {
-                if (!prev || 
-                    prev.position[0] !== result.position[0] || 
-                    prev.position[1] !== result.position[1] || 
-                    prev.position[2] !== result.position[2]) {
-                    
-                    console.log('Raycast Hit:', result.position);
-                    return result;
-                }
-                return prev;
-            });
-        } else {
-            setHighlightedBlock(prev => prev ? null : prev);
-        }
+    const handleMouseMove = useCallback((e: React.MouseEvent) => {
+        mousePosRef.current = { x: e.clientX, y: e.clientY };
     }, []);
 
     const handleMouseLeave = useCallback(() => {
-        setHighlightedBlock(null);
+        mousePosRef.current = null;
     }, []);
 
     return {
-        highlightedBlock,
-        updateRaycastProps: updateProps,
+        getHighlightBlock,
         onRaycastMouseMove: handleMouseMove,
         onRaycastMouseLeave: handleMouseLeave
     };
