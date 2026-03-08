@@ -47,11 +47,16 @@ function isGeometricFullCube(model: any): boolean {
 }
 
 import { LineRenderer } from '../utils/LineRenderer';
+import { useBlockRaycast } from '../hooks/useBlockRaycast';
 
 export default function DeepslateViewer({ litematic, unpackingMethod }: DeepslateViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<StructureRenderer | null>(null);
   const lineRendererRef = useRef<LineRenderer | null>(null);
+  const structureRef = useRef<any>(null); // Store structure for raycasting
+  
+  const { highlightedBlock, updateRaycastProps, onRaycastMouseMove, onRaycastMouseLeave } = useBlockRaycast();
+
   const resourcesRef = useRef<Resources & ItemRendererResources | null>(null);
   const [loading, setLoading] = useState(true);
   const requestRef = useRef<number>(0);
@@ -179,6 +184,7 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
     if (!gl) return;
 
     const structure = convertToDeepslateStructure(litematic);
+    structureRef.current = structure;
     
     // Cleanup previous
     if (rendererRef.current) {
@@ -364,6 +370,16 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
             const projMatrix = mat4.create();
             mat4.perspective(projMatrix, fieldOfView, aspect, zNear, zFar);
             
+            // Update Raycaster Props
+            updateRaycastProps({
+                structure: structureRef.current,
+                canvas: canvasRef.current,
+                viewMatrix: view,
+                projMatrix: projMatrix,
+                cameraPos: cameraPos.current,
+                cameraFront: cameraFront.current
+            });
+
             const sSize = structureSizeRef.current;
             lineRendererRef.current.drawBox(
               view, 
@@ -372,6 +388,17 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
               [sSize[0], sSize[1], sSize[2]], 
               [1, 1, 0] // Yellow box
             );
+
+            // Draw Highlighted Block
+            if (highlightedBlock) {
+                lineRendererRef.current.drawBox(
+                    view,
+                    projMatrix,
+                    [highlightedBlock.position[0], highlightedBlock.position[1], highlightedBlock.position[2]],
+                    [highlightedBlock.position[0] + 1, highlightedBlock.position[1] + 1, highlightedBlock.position[2] + 1],
+                    [1, 1, 1] // White highlight
+                );
+            }
 
             // Draw axes AFTER the box, with bias, to ensure they appear on top
             lineRendererRef.current.drawAxes(view, projMatrix, 1000);
@@ -394,25 +421,29 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging.current) return;
-    const dx = e.clientX - lastMouse.current.x;
-    const dy = e.clientY - lastMouse.current.y;
-    
-    // Sensitivity
-    const sensitivity = 0.2;
+    if (isDragging.current) {
+        const dx = e.clientX - lastMouse.current.x;
+        const dy = e.clientY - lastMouse.current.y;
+        
+        // Sensitivity
+        const sensitivity = 0.2;
 
-    setCameraRotation(prev => {
-        let newYaw = prev.yaw + dx * sensitivity;
-        let newPitch = prev.pitch - dy * sensitivity;
+        setCameraRotation(prev => {
+            let newYaw = prev.yaw + dx * sensitivity;
+            let newPitch = prev.pitch - dy * sensitivity;
 
-        // Clamp Pitch to avoid gimbal lock
-        if (newPitch > 89.0) newPitch = 89.0;
-        if (newPitch < -89.0) newPitch = -89.0;
+            // Clamp Pitch to avoid gimbal lock
+            if (newPitch > 89.0) newPitch = 89.0;
+            if (newPitch < -89.0) newPitch = -89.0;
 
-        return { yaw: newYaw, pitch: newPitch };
-    });
-    
-    lastMouse.current = { x: e.clientX, y: e.clientY };
+            return { yaw: newYaw, pitch: newPitch };
+        });
+        
+        lastMouse.current = { x: e.clientX, y: e.clientY };
+    } else {
+        // Raycasting
+        onRaycastMouseMove(e);
+    }
   };
 
   const handleMouseUp = () => {
@@ -423,7 +454,7 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
     <div 
       style={{ width: '100%', height: '100%', background: '#333', position: 'relative' }}
       onMouseEnter={() => { isHovered.current = true; }}
-      onMouseLeave={() => { isHovered.current = false; pressedKeys.current.clear(); }}
+      onMouseLeave={() => { isHovered.current = false; pressedKeys.current.clear(); onRaycastMouseLeave(); }}
     >
       {loading && <div style={{position:'absolute', top: 20, left: 20, color: 'white'}}>Loading Resources...</div>}
       <canvas
