@@ -15,6 +15,9 @@ interface StatusBarProps {
   useDeepslate: boolean;
   unpackingMethod: 'spanning' | 'non-spanning';
   traversalOrder: string;
+
+  // Interaction Info
+  highlightedBlock: { x: number, y: number, z: number, name: string } | null;
 }
 
 export default function StatusBar(props: StatusBarProps) {
@@ -23,7 +26,15 @@ export default function StatusBar(props: StatusBarProps) {
       
       {/* Left: Status & Errors */}
       <div className="status-left">
-        {props.error ? (
+        {props.highlightedBlock ? (
+           <div className="status-item highlight-info" style={{ fontWeight: 'bold', color: '#8f8' }}>
+              <span className="status-icon">🎯</span>
+              <span className="status-text">
+                 [{props.highlightedBlock.x}, {props.highlightedBlock.y}, {props.highlightedBlock.z}] 
+                 &nbsp; {props.highlightedBlock.name}
+              </span>
+           </div>
+        ) : props.error ? (
           <div className="status-item status-error">
              <span className="status-icon">⚠️</span>
              <span className="status-text">{props.error}</span>

@@ -13,6 +13,9 @@ interface ViewerPanelProps {
   useDeepslate: boolean;
   unpackingMethod: 'spanning' | 'non-spanning';
   traversalOrder: TraversalOrder;
+  
+  // Callbacks
+  onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
 }
 
 export default function ViewerPanel({ 
@@ -22,7 +25,8 @@ export default function ViewerPanel({
   onFileUpload,
   useDeepslate,
   unpackingMethod,
-  traversalOrder 
+  traversalOrder,
+  onHoverBlock
 }: ViewerPanelProps) {
   
   return (
@@ -56,6 +60,7 @@ export default function ViewerPanel({
               <DeepslateViewer 
                 litematic={litematicObj} 
                 unpackingMethod={unpackingMethod}
+                onHoverBlock={onHoverBlock}
               />
             ) : (
               <LitematicViewer 

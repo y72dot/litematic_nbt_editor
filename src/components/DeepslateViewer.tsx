@@ -19,6 +19,7 @@ const TRANSPARENT_BLOCKS = new Set(['minecraft:glass', 'minecraft:water']); // S
 interface DeepslateViewerProps {
   litematic: Litematic | null;
   unpackingMethod?: 'spanning' | 'non-spanning';
+  onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
 }
 
 function upperPowerOfTwo(x: number) {
@@ -49,13 +50,18 @@ function isGeometricFullCube(model: any): boolean {
 import { LineRenderer } from '../utils/LineRenderer';
 import { useBlockRaycast } from '../hooks/useBlockRaycast';
 
-export default function DeepslateViewer({ litematic, unpackingMethod }: DeepslateViewerProps) {
+export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlock }: DeepslateViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<StructureRenderer | null>(null);
   const lineRendererRef = useRef<LineRenderer | null>(null);
   const structureRef = useRef<any>(null); // Store structure for raycasting
   
   const { getHighlightBlock, onRaycastMouseMove, onRaycastMouseLeave } = useBlockRaycast();
+  
+  // Throttle state updates to avoid React render spam
+  const lastHoveredBlockRef = useRef<{ x: number, y: number, z: number } | null>(null);
+  const onHoverBlockRef = useRef(onHoverBlock);
+  onHoverBlockRef.current = onHoverBlock; // Keep latest ref
 
   const resourcesRef = useRef<Resources & ItemRendererResources | null>(null);
   const [loading, setLoading] = useState(true);
@@ -407,6 +413,61 @@ export default function DeepslateViewer({ litematic, unpackingMethod }: Deepslat
                     [hit.position[0] + 1, hit.position[1] + 1, hit.position[2] + 1],
                     [1, 1, 1] // White highlight
                 );
+                
+                // Notify parent if block changed
+                const last = lastHoveredBlockRef.current;
+                const pos = hit.position;
+                if (!last || last.x !== pos[0] || last.y !== pos[1] || last.z !== pos[2]) {
+                    lastHoveredBlockRef.current = { x: pos[0], y: pos[1], z: pos[2] };
+                    
+                    // Get block name for display
+                    let name = 'Unknown Block';
+                    
+                    // Option 1: Use Litematic raw data (Recommended)
+                    // We need to transform deepslate coordinates back to global coordinates
+                    // convertToDeepslateStructure shifts the structure so minX, minY, minZ is at (0,0,0)
+                    // We need to calculate this offset to reverse it.
+                    
+                    if (litematic) {
+                        let minX = Infinity, minY = Infinity, minZ = Infinity;
+                        litematic.regions.forEach(region => {
+                            minX = Math.min(minX, region.position.x);
+                            minY = Math.min(minY, region.position.y);
+                            minZ = Math.min(minZ, region.position.z);
+                        });
+                        
+                        // If no regions, mins are Infinity, handle that
+                        if (litematic.regions.length === 0) { minX = 0; minY = 0; minZ = 0; }
+                        
+                        const globalX = pos[0] + minX;
+                        const globalY = pos[1] + minY;
+                        const globalZ = pos[2] + minZ;
+                        
+                        const blockInfo = litematic.getBlock(globalX, globalY, globalZ);
+                        if (blockInfo) {
+                            name = blockInfo.Name;
+                        }
+                    } else {
+                        // Fallback to structure query (which failed previously)
+                        const block = structureRef.current?.getBlock([pos[0], pos[1], pos[2]]);
+                        if (block) {
+                             if (typeof block.getName === 'function') name = block.getName();
+                             else if ((block as any).name) name = (block as any).name;
+                        }
+                    }
+                    
+                    if (onHoverBlockRef.current) {
+                        onHoverBlockRef.current({ x: pos[0], y: pos[1], z: pos[2], name });
+                    }
+                }
+            } else {
+                // Clear hover if we moved off a block
+                if (lastHoveredBlockRef.current) {
+                    lastHoveredBlockRef.current = null;
+                    if (onHoverBlockRef.current) {
+                        onHoverBlockRef.current(null);
+                    }
+                }
             }
 
             // Draw axes AFTER the box, with bias, to ensure they appear on top

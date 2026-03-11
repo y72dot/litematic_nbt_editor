@@ -108,6 +108,9 @@ function App() {
   const [unpackingMethod, setUnpackingMethod] = useState<'spanning' | 'non-spanning'>('non-spanning');
   const [traversalOrder, setTraversalOrder] = useState<TraversalOrder>('YZX');
   const [useDeepslate, setUseDeepslate] = useState(true);
+  
+  // Interaction State
+  const [highlightedBlock, setHighlightedBlock] = useState<{ x: number, y: number, z: number, name: string } | null>(null);
 
   // File Handling
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -231,6 +234,7 @@ function App() {
             useDeepslate={useDeepslate}
             unpackingMethod={unpackingMethod}
             traversalOrder={traversalOrder}
+            onHoverBlock={setHighlightedBlock}
           />
         );
       case 'metadata':
@@ -378,6 +382,8 @@ function App() {
            useDeepslate={useDeepslate}
            unpackingMethod={unpackingMethod}
            traversalOrder={traversalOrder}
+
+           highlightedBlock={highlightedBlock}
         />
       </div>
 
