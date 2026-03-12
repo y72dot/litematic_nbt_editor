@@ -1,7 +1,7 @@
 import { Structure } from 'deepslate';
-import { Litematic } from '../core/Litematic';
+import type { Schematic } from '../core/Schematic';
 
-export function convertToDeepslateStructure(litematic: Litematic): Structure {
+export function convertToDeepslateStructure(litematic: Schematic): Structure {
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
 

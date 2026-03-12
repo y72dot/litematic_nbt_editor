@@ -2,12 +2,12 @@ import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Stats, Grid } from '@react-three/drei'
 import { useMemo, useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import { Litematic } from './core/Litematic'
+import type { Schematic } from './core/Schematic'
 import { isBlockVisible } from './utils/litematicParser' // Reusing visibility check for now
 import type { TraversalOrder } from './core/BlockStorage'
 
 interface LitematicViewerProps {
-  litematic: Litematic;
+  litematic: Schematic;
   unpackingMethod: 'spanning' | 'non-spanning';
   traversalOrder: TraversalOrder;
 }

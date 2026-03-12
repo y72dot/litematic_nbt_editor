@@ -1,5 +1,7 @@
+import type { Schematic } from '../../core/Schematic';
+
 interface NbtPanelProps {
-  litematicObj: any | null;
+  litematicObj: Schematic | null;
 }
 
 export default function NbtPanel({ litematicObj }: NbtPanelProps) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Litematic } from '../core/Litematic';
+import type { Schematic } from '../core/Schematic';
 import { convertToDeepslateStructure } from '../utils/deepslateAdapter';
 import { BlockDefinition, BlockModel, StructureRenderer, TextureAtlas, type Resources, type ItemRendererResources, Identifier } from 'deepslate';
 import { mat4, vec3 } from 'gl-matrix';
@@ -17,7 +17,7 @@ const OPAQUE_BLOCKS = new Set(['minecraft:stone', 'minecraft:dirt', 'minecraft:g
 const TRANSPARENT_BLOCKS = new Set(['minecraft:glass', 'minecraft:water']); // Simplified
 
 interface DeepslateViewerProps {
-  litematic: Litematic | null;
+  litematic: Schematic | null;
   unpackingMethod?: 'spanning' | 'non-spanning';
   onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
 }

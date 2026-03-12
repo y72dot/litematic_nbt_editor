@@ -1,45 +1,45 @@
 import { useState, useMemo } from 'react';
+import type { Schematic } from '../../core/Schematic';
 
 interface PalettePanelProps {
-  nbtData: any;
-  onUpdate: (newNbt: any) => void;
+  litematicObj: Schematic | null;
+  onUpdate: () => void;
   getBlockColor: (blockId: string) => string;
 }
 
-export default function PalettePanel({ nbtData, onUpdate, getBlockColor }: PalettePanelProps) {
+export default function PalettePanel({ litematicObj, onUpdate, getBlockColor }: PalettePanelProps) {
   const [editingBlock, setEditingBlock] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
   // Extract all unique block types and their counts across all regions
   const { blockCounts } = useMemo(() => {
-    const blockCounts: Record<string, number> = {};
+    const counts: Record<string, number> = {};
 
-    if (!nbtData || !nbtData.value || !nbtData.value.Regions) {
+    if (!litematicObj) {
       return { blockCounts: {} };
     }
 
-    const regions = nbtData.value.Regions.value;
-
-    Object.keys(regions).forEach(regionName => {
-      const region = regions[regionName].value;
+    litematicObj.regions.forEach(region => {
+      // Use fullPalette to get names
+      const palette = region.fullPalette;
       
-      let rawPalette = region.BlockStatePalette.value;
-      if (!Array.isArray(rawPalette) && rawPalette && rawPalette.value && Array.isArray(rawPalette.value)) {
-        rawPalette = rawPalette.value;
-      }
+      // We should count occurrences in storage to be accurate, 
+      // but for palette list, just listing what's in palette is usually enough.
+      // However, the original code counted them.
+      // Original code:
+      // "Object.keys(regions).forEach... blockCounts[name] = (blockCounts[name] || 0) + 1;"
+      // Wait, the original code counted how many *regions* use this block? 
+      // Or if a block appears multiple times in palette? (Unlikely)
+      // Actually, original code iterates regions, then iterates palette of that region.
+      // So if "stone" is in Region A and Region B, count is 2.
       
-      if (Array.isArray(rawPalette)) {
-        rawPalette.forEach((p: any) => {
-          if (p.Name && p.Name.value) {
-            const name = p.Name.value;
-            blockCounts[name] = (blockCounts[name] || 0) + 1;
-          }
-        });
-      }
+      palette.forEach(p => {
+        counts[p.Name] = (counts[p.Name] || 0) + 1;
+      });
     });
 
-    return { blockCounts };
-  }, [nbtData]);
+    return { blockCounts: counts };
+  }, [litematicObj]);
 
   const uniqueBlocks = Object.keys(blockCounts).sort();
 
@@ -49,30 +49,14 @@ export default function PalettePanel({ nbtData, onUpdate, getBlockColor }: Palet
   };
 
   const handleSaveEdit = () => {
-    if (!editingBlock || !editValue || editValue === editingBlock) {
+    if (!editingBlock || !editValue || editValue === editingBlock || !litematicObj) {
       setEditingBlock(null);
       return;
     }
 
-    const newNbt = { ...nbtData };
-    const regions = newNbt.value.Regions.value;
-
-    Object.keys(regions).forEach(regionName => {
-      const region = regions[regionName].value;
-      let palette = region.BlockStatePalette.value;
-      
-      if (!Array.isArray(palette) && palette && palette.value && Array.isArray(palette.value)) {
-        palette = palette.value;
-      }
-
-      palette.forEach((p: any) => {
-        if (p.Name && p.Name.value === editingBlock) {
-          p.Name.value = editValue;
-        }
-      });
-    });
-
-    onUpdate(newNbt);
+    litematicObj.renameBlock(editingBlock, editValue);
+    
+    onUpdate();
     setEditingBlock(null);
   };
 
@@ -84,7 +68,7 @@ export default function PalettePanel({ nbtData, onUpdate, getBlockColor }: Palet
     }
   };
 
-  if (!nbtData) {
+  if (!litematicObj) {
      return (
        <div style={{padding: '20px', textAlign: 'center', color: '#666', fontSize: '12px'}}>
           No file loaded

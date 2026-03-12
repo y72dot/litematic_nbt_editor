@@ -1,10 +1,11 @@
 import LitematicViewer from '../../LitematicViewer';
 import DeepslateViewer from '../DeepslateViewer';
 import { Litematic } from '../../core/Litematic';
+import type { Schematic } from '../../core/Schematic';
 import type { TraversalOrder } from '../../core/BlockStorage';
 
 interface ViewerPanelProps {
-  litematicObj: Litematic | null;
+  litematicObj: Schematic | null;
   loading: boolean;
   error: string | null;
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;

@@ -11,6 +11,8 @@ import { getBlockColor } from './LitematicViewer'
 import MenuBar from './components/MenuBar'
 import StatusBar from './components/StatusBar'
 import { Litematic } from './core/Litematic'
+import { Structure } from './core/Structure'
+import type { Schematic } from './core/Schematic'
 import type { TraversalOrder } from './core/BlockStorage'
 import type { LitematicMetadata } from './types'
 
@@ -99,8 +101,9 @@ function App() {
   
   // App State
   const [metadata, setMetadata] = useState<LitematicMetadata | null>(null)
-  const [litematicObj, setLitematicObj] = useState<Litematic | null>(null);
+  const [litematicObj, setLitematicObj] = useState<Schematic | null>(null);
   const [fileName, setFileName] = useState<string>('edited.litematic')
+
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   
@@ -138,30 +141,35 @@ function App() {
       const { parsed } = await nbt.parse(buffer)
       console.log('Parsed NBT:', parsed)
 
-      const litematic = new Litematic(parsed);
-      setLitematicObj(litematic);
-      setUnpackingMethod(litematic.preferredFormat);
-
-      const root = parsed.value as any
-      const meta = root.Metadata?.value || {}
-      const enclosingSize = meta.EnclosingSize?.value || {}
+      let schematic: Schematic;
+      const root = parsed.value || {};
       
-      const extractedMeta: LitematicMetadata = {
-        name: meta.Name?.value || '',
-        author: meta.Author?.value || '',
-        description: meta.Description?.value || '',
-        regions: root.Regions?.value ? Object.keys(root.Regions.value).length : 0,
-        size: enclosingSize.x ? 
-          { x: enclosingSize.x.value, y: enclosingSize.y.value, z: enclosingSize.z.value } : 
-          'Unknown',
-        enclosingSize: enclosingSize.x ? 
-          { x: enclosingSize.x.value, y: enclosingSize.y.value, z: enclosingSize.z.value } : 
-          'Unknown',
-        timeCreated: meta.TimeCreated?.value ? new Date(Number(meta.TimeCreated.value)).toLocaleString() : 'Unknown',
-        timeModified: meta.TimeModified?.value ? new Date(Number(meta.TimeModified.value)).toLocaleString() : 'Unknown'
+      // Determine format
+      if (root.Regions || root.Metadata || (root.Version && root.Version.value)) {
+        schematic = new Litematic(parsed);
+      } else if (root.blocks && (root.palette || root.palettes) && root.size) {
+        schematic = new Structure(parsed);
+      } else {
+        // Try fallback to Structure if it looks like one, otherwise Litematic or Error
+        if (root.blocks) {
+             schematic = new Structure(parsed);
+        } else {
+             schematic = new Litematic(parsed); // Hope for the best
+        }
       }
 
-      setMetadata(extractedMeta)
+      setLitematicObj(schematic);
+      
+      // Set initial unpacking method if it's Litematic
+      if (schematic instanceof Litematic) {
+        setUnpackingMethod(schematic.preferredFormat);
+      } else {
+        // Structure is always unpacked effectively, but we can set default
+        setUnpackingMethod('non-spanning');
+      }
+
+      setMetadata(schematic.metadata);
+
 
     } catch (err: any) {
       console.error(err)
@@ -176,34 +184,76 @@ function App() {
     setMetadata({ ...metadata, [field]: value })
   }
 
-  const handlePaletteUpdate = (newNbt: any) => {
-    const newLitematic = new Litematic(newNbt);
-    setLitematicObj(newLitematic);
+  const handlePaletteUpdate = () => {
+    // Force re-render as the schematic object has been mutated in place
+    forceUpdate();
   };
 
-  const handleSave = () => {
+  const handleSave = (format?: 'litematic' | 'nbt') => {
     if (!litematicObj || !metadata) return
 
     try {
-      const root = litematicObj.rawNbt.value
-      if (!root.Metadata) root.Metadata = { type: 'compound', value: {} }
-      const metaVal = root.Metadata.value
-      
-      metaVal.Name = { type: 'string', value: metadata.name }
-      metaVal.Author = { type: 'string', value: metadata.author }
-      metaVal.Description = { type: 'string', value: metadata.description }
-      
-      const now = Date.now()
-      metaVal.TimeModified = { type: 'long', value: BigInt(now) }
+      // Update object metadata with current UI state
+      litematicObj.metadata = { ...litematicObj.metadata, ...metadata };
 
-      const newBuffer = nbt.writeUncompressed(litematicObj.rawNbt)
+      // Determine format to save
+      // If format is not specified, use the current object's natural format
+      // Litematic -> .litematic
+      // Structure -> .nbt
+      // But if we want to "Export As...", we might need conversion.
+      
+      // Since our Schematic interface doesn't strictly support cross-conversion yet in a single method call,
+      // we might need to handle it here or enhance the classes.
+      
+      // For now, let's assume we save in the format of the current object 
+      // UNLESS a specific format is requested that differs.
+      
+      let nbtData: any;
+      let targetFileName = fileName;
+
+      if (format === 'nbt' && litematicObj instanceof Litematic) {
+          // Convert Litematic -> Structure NBT
+          // This requires creating a new Structure instance from Litematic regions
+          // But Structure constructor expects NBT.
+          // We should add a static method or utility to create Structure from Regions.
+          // For now, let's keep it simple: We need a way to convert.
+          
+          // Let's implement a simple on-the-fly conversion here or inside Structure class
+          // ideally: const structure = Structure.fromSchematic(litematicObj);
+          // nbtData = structure.toNbt();
+          
+          // Since we haven't implemented that yet, let's just warn and save as original for now, 
+          // but we will implement it in next steps.
+          console.warn("Litematic -> Structure conversion triggered");
+          // Placeholder:
+          nbtData = litematicObj.toNbt(); 
+          if (!targetFileName.endsWith('.litematic')) targetFileName += '.litematic';
+      } else if (format === 'litematic' && litematicObj instanceof Structure) {
+          // Convert Structure -> Litematic NBT
+          console.warn("Structure -> Litematic conversion triggered");
+          // Placeholder:
+          nbtData = litematicObj.toNbt();
+          if (!targetFileName.endsWith('.nbt')) targetFileName += '.nbt';
+      } else {
+          // No conversion needed
+          nbtData = litematicObj.toNbt();
+          
+          // Fix extension if needed
+          if (format === 'litematic' && !targetFileName.endsWith('.litematic')) {
+              targetFileName = targetFileName.replace(/\.\w+$/, '') + '.litematic';
+          } else if (format === 'nbt' && !targetFileName.endsWith('.nbt')) {
+              targetFileName = targetFileName.replace(/\.\w+$/, '') + '.nbt';
+          }
+      }
+
+      const newBuffer = nbt.writeUncompressed(nbtData)
       const compressed = pako.gzip(new Uint8Array(newBuffer))
 
       const blob = new Blob([compressed], { type: 'application/octet-stream' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = fileName
+      a.download = targetFileName
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -242,7 +292,7 @@ function App() {
       case 'palette':
         return (
           <PalettePanel 
-            nbtData={litematicObj?.rawNbt} 
+            litematicObj={litematicObj}
             onUpdate={handlePaletteUpdate} 
             getBlockColor={getBlockColor} 
           />

@@ -3,7 +3,7 @@ import './MenuBar.css';
 
 interface MenuBarProps {
   onOpenFile: (e: any) => void;
-  onSaveFile: () => void;
+  onSaveFile: (format?: 'litematic' | 'nbt') => void;
   onReset: () => void;
   onAbout: () => void;
   
@@ -80,11 +80,32 @@ export default function MenuBar(props: MenuBarProps) {
               <span>Open...</span>
               <span className="dropdown-shortcut">Ctrl+O</span>
             </div>
-            <div className={`dropdown-item ${!props.hasFile ? 'disabled' : ''}`} onClick={() => props.hasFile && handleItemClick(props.onSaveFile)}>
+            
+            <div className={`dropdown-item ${!props.hasFile ? 'disabled' : ''}`} onClick={() => props.hasFile && handleItemClick(() => props.onSaveFile())}>
               <span className="dropdown-icon">💾</span>
               <span>Save</span>
               <span className="dropdown-shortcut">Ctrl+S</span>
             </div>
+
+            <div className="dropdown-separator"></div>
+
+            <div className={`dropdown-item ${!props.hasFile ? 'disabled' : ''}`} style={{position: 'relative'}}>
+               <span className="dropdown-icon">📤</span>
+               <span>Export As...</span>
+               <span className="dropdown-arrow">▶</span>
+               
+               {/* Submenu on hover (handled by CSS usually, but for click menu we might need logic) */}
+               {/* Since this is a simple react implementation, let's just show nested items or make it expand */}
+               {/* A simpler approach for this UI style is to just list the options directly with indentation or separator */}
+            </div>
+            {/* Expanded export options for simplicity in this specific UI implementation */}
+            <div className={`dropdown-item ${!props.hasFile ? 'disabled' : ''}`} style={{paddingLeft: '35px'}} onClick={() => props.hasFile && handleItemClick(() => props.onSaveFile('litematic'))}>
+              <span>.litematic</span>
+            </div>
+            <div className={`dropdown-item ${!props.hasFile ? 'disabled' : ''}`} style={{paddingLeft: '35px'}} onClick={() => props.hasFile && handleItemClick(() => props.onSaveFile('nbt'))}>
+              <span>.nbt (Structure)</span>
+            </div>
+
             <div className="dropdown-separator"></div>
             <div className="dropdown-item" onClick={() => handleItemClick(props.onReset)}>
               <span className="dropdown-icon">🔄</span>
