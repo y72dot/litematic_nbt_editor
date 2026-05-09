@@ -26,6 +26,8 @@ dist-ssr
 .refer/
 .trae/
 
+coverage
+
 # Test scripts
 test_*.ts
 test_*.js
