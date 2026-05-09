@@ -1,73 +1,105 @@
-# React + TypeScript + Vite
+# Litematic Studio
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+基于 Web 的 Minecraft 建筑文件（`.litematic` / `.nbt`）3D 查看与编辑工具。
 
-Currently, two official plugins are available:
+## 功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **3D 可视化** — 使用 Three.js 渲染建筑结构，支持自由视角（WASD 移动 / 拖拽旋转）
+- **多格式支持** — 兼容 Litematica 投影文件（`.litematic`）和原版结构方块文件（`.nbt`）
+- **悬停高亮** — 射线检测实时显示指向方块坐标与类型
+- **区块调色板** — 浏览、搜索、批量重命名方块
+- **元数据编辑** — 修改名称、作者、描述等元信息
+- **Raw NBT 查看** — 直接查看完整 NBT 数据结构
+- **解包设置** — 切换 spanning / non-spanning 模式和 6 种遍历顺序
+- **格式转换** — 在 `.litematic` 和 `.nbt` 之间导出
+- **可拖拽面板** — dockable 布局，自由排布功能面板
 
-## React Compiler
+## 技术栈
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| 类别       | 技术                                                       |
+| ---------- | ---------------------------------------------------------- |
+| 框架       | React 19 + TypeScript + Vite                               |
+| 3D 渲染    | Three.js（`@react-three/fiber` + `@react-three/drei`）    |
+| NBT 解析   | `prismarine-nbt`                                           |
+| Gzip 压缩  | `pako`                                                     |
+| 面板布局   | `flexlayout-react`                                        |
+| 数学库     | `gl-matrix`                                                |
+| 测试       | Vitest + `@vitest/coverage-v8`                             |
 
-## Expanding the ESLint configuration
+## 项目结构
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+src/
+├── core/                  # 核心数据模型
+│   ├── Schematic.ts       # Schematic 接口定义
+│   ├── Litematic.ts       # .litematic 文件读写
+│   ├── Structure.ts       # .nbt 结构文件读写
+│   ├── Region.ts          # 区域（调色板 + 方块存储）
+│   ├── BlockStorage.ts    # 方块存储接口
+│   ├── PackedBlockStorage.ts  # 压缩方块存储（只读）
+│   ├── ArrayBlockStorage.ts   # 数组方块存储（可读写）
+│   └── __tests__/         # 单元测试
+├── utils/                 # 工具模块
+│   ├── Raycaster.ts       # 3D DDA 体素射线检测
+│   ├── litematicParser.ts # 位宽计算 / 可见性检查
+│   ├── deepslateAdapter.ts
+│   ├── LineRenderer.ts
+│   └── __tests__/         # 单元测试
+├── components/            # React UI 组件
+│   ├── MenuBar.tsx        # 菜单栏
+│   ├── StatusBar.tsx      # 状态栏
+│   └── panels/
+│       ├── ViewerPanel.tsx    # 3D 视图面板
+│       ├── MetadataPanel.tsx  # 元数据编辑面板
+│       ├── PalettePanel.tsx   # 调色板面板
+│       ├── SettingsPanel.tsx  # 设置面板
+│       └── NbtPanel.tsx       # Raw NBT 查看面板
+├── hooks/
+│   └── useBlockRaycast.ts # 方块悬停射线检测 Hook
+├── App.tsx                # 主应用（布局工厂、文件处理）
+├── LitematicViewer.tsx    # 3D 场景渲染
+├── types.ts               # 公共类型定义
+└── main.tsx               # 入口
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 快速开始
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+# 安装依赖
+npm install
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# 开发模式
+npm run dev
+
+# 构建
+npm run build
+
+# 预览构建产物
+npm run preview
+
+# 运行测试
+npm test
+
+# 测试 + 覆盖率
+npm run test:coverage
 ```
+
+## 使用说明
+
+1. 点击 **File > Open** 或拖拽 `.litematic` / `.nbt` 文件到窗口
+2. 在 **3D Viewer** 面板中可自由浏览建筑结构
+3. 在 **Metadata** 面板修改名称、作者、描述
+4. 在 **Palette** 面板搜索并批量重命名方块类型
+5. 在 **Settings** 面板调整解包方式和遍历顺序
+6. 点击 **File > Save** 保存修改后的文件，可在 `.litematic` 和 `.nbt` 格式间选择
+
+## 格式说明
+
+- **Litematic（`.litematic`）** — Litematica Mod 的投影格式，支持多区域、Version 5 (1.13-1.15) / Version 6 (1.16+)
+- **NBT Structure（`.nbt`）** — Minecraft 原版结构方块格式，支持单/多调色板
+- **Spanning** — Version 5 的跨长边界压缩方式
+- **Non-spanning** — Version 6 的对齐长边界压缩方式
+
+## License
+
+MIT
