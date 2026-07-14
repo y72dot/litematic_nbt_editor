@@ -194,6 +194,50 @@ writeFileSync(join(fixturesDir, 'not-gzip.litematic'), Buffer.from(notNbtGzip));
 
 console.log('[fixtures] Created not-gzip.litematic');
 
+// ── Fixture 7: Edit test litematic (V6 non-spanning, 3×3×3, 5-palette with non-air blocks) ─
+
+const editTestPalette = [
+  paletteEntry('minecraft:air'),
+  paletteEntry('minecraft:stone'),
+  paletteEntry('minecraft:dirt'),
+  paletteEntry('minecraft:grass_block'),
+  paletteEntry('minecraft:oak_planks'),
+];
+
+// YZX traversal: index = y * sz * sx + z * sx + x = y * 9 + z * 3 + x
+// Non-spanning: 3 bits/block, 21 blocks/long (floor(64/3))
+// (0,0,0) → idx 0  → palette 1 (stone)       → long 0 bit 0  = 1
+// (1,1,1) → idx 13 → palette 2 (dirt)         → long 0 bit 39 = 2
+// (0,2,0) → idx 18 → palette 4 (oak_planks)   → long 0 bit 54 = 4
+// (2,2,2) → idx 26 → palette 3 (grass_block)  → long 1 bit 15 = 3
+const editTestLong0 = (1n << 0n) | (2n << 39n) | (4n << 54n); // = 72058693549555713n
+const editTestLong1 = (3n << 15n);                              // = 98304n
+
+writeGzippedNbt('edit-test.litematic', {
+  Version: int(6),
+  Metadata: cc({
+    Name: str('Edit Test Build'),
+    Author: str('E2E'),
+    Description: str('Fixture with non-air blocks for editing tests'),
+    EnclosingSize: cc({ x: int(3), y: int(3), z: int(3) }),
+    TimeCreated: long(1700000000000n),
+    TimeModified: long(1700000001000n),
+  }),
+  Regions: cc({
+    Main: cc({
+      Size: cc({ x: int(3), y: int(3), z: int(3) }),
+      Position: cc({ x: int(0), y: int(0), z: int(0) }),
+      BlockStatePalette: {
+        type: 'list',
+        value: { type: 'compound', value: editTestPalette },
+      },
+      BlockStates: longArr([editTestLong0, editTestLong1]),
+    }),
+  }),
+});
+
+console.log('[fixtures] Created edit-test.litematic');
+
 // ── Fixture 6: Empty regions litematic ───────────────────────
 
 writeGzippedNbt('empty-regions.litematic', {

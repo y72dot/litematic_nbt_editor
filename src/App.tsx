@@ -335,6 +335,23 @@ function App() {
   const [, setTick] = useState(0);
   const forceUpdate = () => setTick(t => t + 1);
 
+  // E2E test harness — exposes internal state for deterministic testing
+  if (typeof window !== 'undefined') {
+    (window as any).__e2e = {
+      setBlock: handleSetBlock,
+      replaceBlocks: handleReplaceBlocks,
+      getBlock: (x: number, y: number, z: number) => litematicObj?.getBlock(x, y, z) ?? null,
+      getSelectedBlocks: () => [...selectedBlocks],
+      setSelectedBlocks: (keys: string[]) => setSelectedBlocks(new Set(keys)),
+      getMetadata: () => metadata,
+      getLitematicObj: () => litematicObj,
+      getEditHistory: () => editHistoryRef.current,
+      getUndoLabel: () => editHistoryRef.current.undoLabel,
+      getRedoLabel: () => editHistoryRef.current.redoLabel,
+      forceUpdate,
+    };
+  }
+
   // --- Layout Factory ---
   const factory = (node: TabNode) => {
     const component = node.getComponent();
