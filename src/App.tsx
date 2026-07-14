@@ -14,6 +14,7 @@ import { Litematic } from './core/Litematic'
 import { Structure } from './core/Structure'
 import type { Schematic } from './core/Schematic'
 import type { TraversalOrder } from './core/BlockStorage'
+import { detectSchematicFormat } from './utils/formatDetector'
 import { EditHistory } from './core/commands/EditHistory'
 import { SetBlockCommand } from './core/commands/SetBlockCommand'
 import { BatchSetBlockCommand } from './core/commands/BatchSetBlockCommand'
@@ -98,6 +99,29 @@ const defaultLayout: IJsonModel = {
     ]
   }
 };
+
+/**
+ * Count how many unpacked block indices fall outside the palette range.
+ * Samples from the middle of the data so that the first long (which is
+ * always bit-aligned for both spanning and non-spanning) doesn't skew
+ * the result for small structures.
+ */
+function countPaletteViolations(schematic: Schematic): number {
+  let violations = 0;
+  for (const region of schematic.regions) {
+    const blocks = region.storage.toArray();
+    const maxIndex = region.fullPalette.length - 1;
+    const total = blocks.length;
+    // Start at 25 % into the data to skip the first long boundary region
+    // where spanning and non-spanning are always aligned.
+    const sampleStart = Math.floor(total * 0.25);
+    const sampleEnd = Math.min(total, sampleStart + 1000);
+    for (let i = sampleStart; i < sampleEnd; i++) {
+      if (blocks[i] > maxIndex) violations++;
+    }
+  }
+  return violations;
+}
 
 function App() {
   const [model] = useState(() => Model.fromJson(defaultLayout));
@@ -207,32 +231,40 @@ function App() {
       const { parsed } = await nbt.parse(buffer)
       console.log('Parsed NBT:', parsed)
 
-      let schematic: Schematic;
-      const root = parsed.value || {};
-      
       // Determine format
-      if (root.Regions || root.Metadata || (root.Version && root.Version.value)) {
+      const formatResult = detectSchematicFormat(parsed, file.name);
+
+      let schematic: Schematic;
+      let unpacking: 'spanning' | 'non-spanning' = formatResult.preferredFormat ?? 'non-spanning';
+
+      if (formatResult.format === 'litematic') {
         schematic = new Litematic(parsed);
-      } else if (root.blocks && (root.palette || root.palettes) && root.size) {
-        schematic = new Structure(parsed);
-      } else {
-        // Try fallback to Structure if it looks like one, otherwise Litematic or Error
-        if (root.blocks) {
-             schematic = new Structure(parsed);
-        } else {
-             schematic = new Litematic(parsed); // Hope for the best
+        unpacking = formatResult.preferredFormat ?? 'non-spanning';
+
+        // Compare both unpacking methods on a sample slice.
+        // If the alternative produces fewer palette violations, use it.
+        const defaultViolations = countPaletteViolations(schematic);
+        if (defaultViolations > 0) {
+          const altMethod: 'spanning' | 'non-spanning' =
+            unpacking === 'spanning' ? 'non-spanning' : 'spanning';
+          const altSchematic = new Litematic(parsed, altMethod);
+          const altViolations = countPaletteViolations(altSchematic);
+
+          if (altViolations < defaultViolations) {
+            console.warn(
+              `Auto-corrected unpacking: "${unpacking}" had ${defaultViolations} ` +
+              `out-of-range indices, switching to "${altMethod}" (${altViolations}).`
+            );
+            schematic = altSchematic;
+            unpacking = altMethod;
+          }
         }
+      } else {
+        schematic = new Structure(parsed);
       }
 
       setLitematicObj(schematic);
-      
-      // Set initial unpacking method if it's Litematic
-      if (schematic instanceof Litematic) {
-        setUnpackingMethod(schematic.preferredFormat);
-      } else {
-        // Structure is always unpacked effectively, but we can set default
-        setUnpackingMethod('non-spanning');
-      }
+      setUnpackingMethod(unpacking);
 
       setMetadata(schematic.metadata);
 

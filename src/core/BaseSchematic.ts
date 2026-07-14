@@ -76,6 +76,9 @@ export abstract class BaseSchematic implements Schematic {
         ry >= 0 && ry < region.size.y &&
         rz >= 0 && rz < region.size.z
       ) {
+        // Ensure storage is editable (lazy conversion from packed to array)
+        region.enableEditing();
+
         // Find or create palette entry
         let paletteIndex = region.fullPalette.findIndex(p => p.Name === blockName);
         if (paletteIndex === -1) {

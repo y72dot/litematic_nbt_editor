@@ -10,7 +10,7 @@ export class Litematic extends BaseSchematic {
   public version: number = 6;
   public preferredFormat: 'spanning' | 'non-spanning' = 'non-spanning';
 
-  constructor(nbtData: any) {
+  constructor(nbtData: any, forceFormat?: 'spanning' | 'non-spanning') {
     super();
     this.rawNbt = nbtData;
     const root = nbtData.value || {};
@@ -20,8 +20,10 @@ export class Litematic extends BaseSchematic {
       this.version = root.Version.value;
     }
 
-    // Determine preferred format based on version
-    if (this.version < 6) {
+    // Determine preferred format based on version, allow override
+    if (forceFormat) {
+      this.preferredFormat = forceFormat;
+    } else if (this.version < 6) {
       this.preferredFormat = 'spanning';
     }
 
@@ -52,10 +54,9 @@ export class Litematic extends BaseSchematic {
       });
     }
 
-    // Convert to editable storage on load (Phase 1.2)
-    for (const region of this.regions) {
-      region.enableEditing();
-    }
+    // Note: enableEditing() is deferred until the first write operation.
+    // Keeping PackedBlockStorage allows dynamic settings changes
+    // (unpacking method / traversal order) to take effect immediately.
   }
 
   // ── Format-specific rawNbt update for renameBlock ────────────
