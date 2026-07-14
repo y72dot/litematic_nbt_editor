@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Litematic } from '../Litematic'
+import { BaseSchematic } from '../BaseSchematic'
+import { PackedBlockStorage } from '../PackedBlockStorage'
 import { makeMockLitematicNbt, makeMockRegionNbt } from './testHelpers'
 
 describe('Litematic', () => {
@@ -545,6 +547,189 @@ describe('Litematic', () => {
 
       const names = palette.map((p: any) => p.Name.value)
       expect(names).toContain('minecraft:emerald_block')
+    })
+
+    // ── V5/V6 round-trip ────────────────────────────────────
+
+    it('V5 spanning round-trip: setBlock → toNbt → reparse → verify', () => {
+      const sz = { x: 3, y: 3, z: 3 }
+      // Generate YZX-ordered block values (cycling through palette indices 0, 1, 2)
+      const values: number[] = []
+      for (let y = 0; y < 3; y++) {
+        for (let z = 0; z < 3; z++) {
+          for (let x = 0; x < 3; x++) {
+            values.push((x + z + y) % 3)
+          }
+        }
+      }
+
+      const nbtValue = makeMockLitematicNbt({
+        version: 5,
+        regions: {
+          Main: makeMockRegionNbt({
+            size: sz,
+            palette: ['minecraft:air', 'minecraft:stone', 'minecraft:dirt'],
+            blockStatesFormat: 'spanning',
+            blockStatesValues: values,
+          }),
+        },
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const lit = new Litematic(rootTag)
+
+      expect(lit.version).toBe(5)
+      expect(lit.preferredFormat).toBe('spanning')
+
+      // Initial data loaded correctly via spanning decode
+      expect(lit.getBlock(0, 0, 0)!.Name).toBe('minecraft:air')    // (0+0+0)%3=0
+      expect(lit.getBlock(0, 0, 1)!.Name).toBe('minecraft:stone')   // (0+1+0)%3=1
+
+      // Modify a block
+      lit.setBlock(1, 1, 1, 'minecraft:stone')
+
+      // Serialize to NBT (uses spanning encoding)
+      const saved = lit.toNbt()
+
+      // Re-parse
+      const reloaded = new Litematic(saved)
+
+      expect(reloaded.version).toBe(5)
+      expect(reloaded.preferredFormat).toBe('spanning')
+      expect(reloaded.getBlock(1, 1, 1)!.Name).toBe('minecraft:stone')
+      // Verify other blocks preserved after round-trip
+      expect(reloaded.getBlock(0, 0, 0)!.Name).toBe('minecraft:air')
+      expect(reloaded.getBlock(0, 0, 2)!.Name).toBe('minecraft:dirt') // (0+2+0)%3=2, palette[2]=dirt
+    })
+
+    it('V5 toNbt encodes BlockStates using spanning layout', () => {
+      const sz = { x: 2, y: 2, z: 2 }
+      const values = [0, 1, 2, 0, 1, 2, 0, 1]
+
+      const nbtValue = makeMockLitematicNbt({
+        version: 5,
+        regions: {
+          Main: makeMockRegionNbt({
+            size: sz,
+            palette: ['minecraft:air', 'minecraft:stone', 'minecraft:dirt'],
+            blockStatesFormat: 'spanning',
+            blockStatesValues: values,
+          }),
+        },
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const lit = new Litematic(rootTag)
+
+      // Set a block to force re-encoding
+      lit.setBlock(0, 0, 0, 'minecraft:dirt')
+
+      const saved = lit.toNbt()
+      const regionComp = saved.value.Regions.value['Main'].value
+      const encoded = regionComp.BlockStates.value as BigInt64Array
+
+      // Verify encoded with spanning: longCount = ceil(volume * bps / 64)
+      // volume=8, bps=2 (palette size 3 → ceil(log2(3))=2), so 8*2/64=0.25→1 long
+      // This is same as non-spanning for bps=2, so just verify it's a valid BigInt64Array
+      expect(encoded).toBeInstanceOf(BigInt64Array)
+      expect(encoded.length).toBeGreaterThan(0)
+
+      // Parse back and verify
+      const reloaded = new Litematic(saved)
+      expect(reloaded.preferredFormat).toBe('spanning')
+      expect(reloaded.getBlock(0, 0, 0)!.Name).toBe('minecraft:dirt')
+    })
+
+    it('V5 palette expansion preserved in toNbt round-trip', () => {
+      const sz = { x: 2, y: 2, z: 2 }
+      const values = [0, 1, 0, 1, 0, 1, 0, 1]
+
+      const nbtValue = makeMockLitematicNbt({
+        version: 5,
+        regions: {
+          Main: makeMockRegionNbt({
+            size: sz,
+            palette: ['minecraft:air', 'minecraft:stone'],
+            blockStatesFormat: 'spanning',
+            blockStatesValues: values,
+          }),
+        },
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const lit = new Litematic(rootTag)
+
+      // Add a block not in original palette (triggers palette expansion)
+      lit.setBlock(1, 1, 1, 'minecraft:emerald_block')
+
+      const saved = lit.toNbt()
+      const reloaded = new Litematic(saved)
+
+      // Verify the new block survived round-trip with spanning format
+      expect(reloaded.getBlock(1, 1, 1)!.Name).toBe('minecraft:emerald_block')
+      // Verify original palette entries still correct
+      expect(reloaded.getBlock(0, 0, 0)!.Name).toBe('minecraft:air')
+      // Palette should contain the expanded entry
+      expect(reloaded.regions[0].palette).toContain('minecraft:emerald_block')
+    })
+
+    it('V6 non-spanning round-trip with non-zero initial data', () => {
+      const sz = { x: 3, y: 3, z: 3 }
+      const values: number[] = []
+      for (let y = 0; y < 3; y++) {
+        for (let z = 0; z < 3; z++) {
+          for (let x = 0; x < 3; x++) {
+            values.push((x * 7 + z * 3 + y) % 4)
+          }
+        }
+      }
+
+      const nbtValue = makeMockLitematicNbt({
+        version: 6,
+        regions: {
+          Main: makeMockRegionNbt({
+            size: sz,
+            palette: ['minecraft:air', 'minecraft:stone', 'minecraft:dirt', 'minecraft:grass_block'],
+            blockStatesFormat: 'non-spanning',
+            blockStatesValues: values,
+          }),
+        },
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const lit = new Litematic(rootTag)
+
+      expect(lit.version).toBe(6)
+      expect(lit.preferredFormat).toBe('non-spanning')
+
+      // Modify several blocks
+      lit.setBlock(2, 2, 2, 'minecraft:dirt')
+      lit.setBlock(0, 1, 2, 'minecraft:stone')
+
+      // Round-trip
+      const saved = lit.toNbt()
+      const reloaded = new Litematic(saved)
+
+      expect(reloaded.getBlock(2, 2, 2)!.Name).toBe('minecraft:dirt')
+      expect(reloaded.getBlock(0, 1, 2)!.Name).toBe('minecraft:stone')
+      // Spot-check unmodified block
+      expect(reloaded.getBlock(0, 0, 0)!.Name).toBe('minecraft:air')
+    })
+
+    it('encodeBlockStates(spanning) ↔ readSpanning decoding symmetry', () => {
+      const sz = { x: 2, y: 2, z: 3 } // 12 blocks
+      const bps = 7
+      const values = new Uint32Array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120])
+
+      // Encode using production code
+      const encoded = BaseSchematic.encodeBlockStates(values, bps, sz, 'spanning')
+
+      // Decode using PackedBlockStorage spanning
+      const s = new PackedBlockStorage(encoded, 128, sz, 'spanning')
+
+      // Verify all values round-trip through encode→decode
+      for (let i = 0; i < 12; i++) {
+        const y = Math.floor(i / 6)   // zSize * xSize = 3*2 = 6
+        const z = Math.floor((i % 6) / 2)
+        const x = i % 2
+        expect(s.getBlockIndex(x, y, z)).toBe(values[i])
+      }
     })
   })
 })

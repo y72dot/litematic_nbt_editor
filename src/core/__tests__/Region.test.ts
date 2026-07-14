@@ -194,6 +194,83 @@ describe('Region', () => {
       // Should not throw
       expect(() => region.setUnpackingMethod('spanning')).not.toThrow()
     })
+
+    it('switching unpacking method changes getBlockIndex results on spanning data', () => {
+      // bps=7 (palette size 128), blocksPerLong=9
+      // Block 9 crosses long boundary in spanning mode (9*7=63, crossing at bit 64)
+      const sz = { x: 1, y: 1, z: 10 }
+      const values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 127]
+
+      const raw = makeMockRegionNbt({
+        size: sz,
+        palette: Array.from({ length: 128 }, (_, i) => `p${i}`),
+        blockStatesFormat: 'spanning',
+        blockStatesValues: values,
+      })
+
+      // Start with non-spanning (wrong method for spanning-packed data)
+      const region = new Region('Test', raw, 'non-spanning')
+      const nsVal9 = region.storage.getBlockIndex(0, 0, 9)
+
+      // Switch to spanning (correct method)
+      region.setUnpackingMethod('spanning')
+      const sVal9 = region.storage.getBlockIndex(0, 0, 9)
+
+      // Values should differ at block 9 (cross-long boundary)
+      expect(nsVal9).not.toBe(sVal9)
+      // Spanning should decode the correct value
+      expect(sVal9).toBe(127)
+    })
+
+    it('setUnpackingMethod + enableEditing preserves correct spanning data', () => {
+      const sz = { x: 1, y: 1, z: 12 }
+      const values = Array.from({ length: 12 }, (_, i) => (i * 11 + 3) & 127)
+
+      const raw = makeMockRegionNbt({
+        size: sz,
+        palette: Array.from({ length: 128 }, (_, i) => `p${i}`),
+        blockStatesFormat: 'spanning',
+        blockStatesValues: values,
+      })
+
+      const region = new Region('Test', raw, 'non-spanning')
+      // Switch to correct method before editing
+      region.setUnpackingMethod('spanning')
+      region.enableEditing()
+
+      // All values should be correctly preserved
+      for (let i = 0; i < 12; i++) {
+        expect(region.storage.getBlockIndex(0, 0, i)).toBe(values[i])
+      }
+    })
+
+    it('spanning data: non-spanning → spanning → back to non-spanning', () => {
+      const sz = { x: 1, y: 1, z: 10 }
+      const values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 127]
+
+      const raw = makeMockRegionNbt({
+        size: sz,
+        palette: Array.from({ length: 128 }, (_, i) => `p${i}`),
+        blockStatesFormat: 'spanning',
+        blockStatesValues: values,
+      })
+
+      const region = new Region('Test', raw, 'non-spanning')
+
+      // Initially read with wrong method
+      const badVal = region.storage.getBlockIndex(0, 0, 9)
+      expect(badVal).not.toBe(127)
+
+      // Switch to correct method
+      region.setUnpackingMethod('spanning')
+      const goodVal = region.storage.getBlockIndex(0, 0, 9)
+      expect(goodVal).toBe(127)
+
+      // Switch back to non-spanning
+      region.setUnpackingMethod('non-spanning')
+      const badAgain = region.storage.getBlockIndex(0, 0, 9)
+      expect(badAgain).toBe(badVal)
+    })
   })
 
   // ── setTraversalOrder ────────────────────────────────────────

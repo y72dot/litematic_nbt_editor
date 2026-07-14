@@ -15,17 +15,49 @@
  * (NOT full list tags), so inner[0].value gives the raw array directly.
  */
 
+/**
+ * Pack values into a BigInt64Array using NON-SPANNING layout.
+ * Each long holds floor(64 / bps) blocks. Leftover bits per long are unused.
+ */
+export function packNonSpanning(values: number[], bitsPerBlock: number): BigInt64Array {
+  const blocksPerLong = Math.floor(64 / bitsPerBlock)
+  const numLongs = Math.ceil(values.length / blocksPerLong)
+  const longs = new BigInt64Array(numLongs)
+  for (let i = 0; i < values.length; i++) {
+    const longIdx = Math.floor(i / blocksPerLong)
+    const bitOffset = (i % blocksPerLong) * bitsPerBlock
+    longs[longIdx] |= BigInt(values[i]) << BigInt(bitOffset)
+  }
+  return longs
+}
+
+/**
+ * Pack values into a BigInt64Array using SPANNING layout.
+ * Values are packed contiguously without long-boundary gaps.
+ */
+export function packSpanning(values: number[], bitsPerBlock: number): BigInt64Array {
+  const totalBits = values.length * bitsPerBlock
+  const numLongs = Math.ceil(totalBits / 64)
+  const longs = new BigInt64Array(numLongs)
+  for (let i = 0; i < values.length; i++) {
+    const startBit = i * bitsPerBlock
+    const startLong = Math.floor(startBit / 64)
+    const bitOffset = startBit % 64
+    const val = BigInt(values[i])
+    longs[startLong] |= val << BigInt(bitOffset)
+    if (bitOffset + bitsPerBlock > 64) {
+      // Spans into next long
+      const bitsInFirst = 64 - bitOffset
+      longs[startLong + 1] |= val >> BigInt(bitsInFirst)
+    }
+  }
+  return longs
+}
+
 function cc(value: Record<string, unknown>): Record<string, unknown> {
   // prismarine-nbt compound tags expose children directly on the tag object
   // as well as on .value, so spread value properties onto the tag
   return { type: 'compound', value, ...value }
-}
-
-function listStr(values: string[]): { type: 'list'; value: { type: 'string'; value: unknown[] } } {
-  return {
-    type: 'list',
-    value: { type: 'string', value: values.map(v => str(v)) },
-  }
 }
 
 function str(value: string): { type: 'string'; value: string } {
@@ -66,6 +98,10 @@ export function makeMockRegionNbt(overrides: {
   palette?: string[]
   paletteWithProps?: { Name: string; Properties?: Record<string, string> }[]
   blockStates?: BigInt64Array | number[]
+  /** Generate BlockStates using 'spanning' or 'non-spanning' packing. Default: 'non-spanning'. */
+  blockStatesFormat?: 'spanning' | 'non-spanning'
+  /** Flat block values to encode. Requires blockStatesFormat. Uses default palette size for bps. */
+  blockStatesValues?: number[]
 } = {}): Record<string, unknown> {
   const size = overrides.size ?? { x: 2, y: 2, z: 2 }
   const position = overrides.position ?? { x: 0, y: 0, z: 0 }
@@ -77,7 +113,21 @@ export function makeMockRegionNbt(overrides: {
     : paletteNames.map(n => paletteEntry(n))
 
   const volume = size.x * size.y * size.z
-  const blockStates = overrides.blockStates ?? new BigInt64Array(Math.ceil((volume * 2) / 64))
+  let blockStates: BigInt64Array
+
+  if (overrides.blockStates !== undefined) {
+    blockStates = overrides.blockStates instanceof BigInt64Array
+      ? overrides.blockStates
+      : new BigInt64Array(overrides.blockStates.map(v => BigInt(v)))
+  } else if (overrides.blockStatesValues) {
+    const format = overrides.blockStatesFormat ?? 'non-spanning'
+    const bps = Math.max(2, Math.ceil(Math.log2(paletteNames.length)))
+    blockStates = format === 'spanning'
+      ? packSpanning(overrides.blockStatesValues, bps)
+      : packNonSpanning(overrides.blockStatesValues, bps)
+  } else {
+    blockStates = new BigInt64Array(Math.ceil((volume * 2) / 64))
+  }
 
   return {
     Size: cc({ x: int(size.x), y: int(size.y), z: int(size.z) }),

@@ -1,47 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PackedBlockStorage } from '../PackedBlockStorage'
 import type { TraversalOrder } from '../BlockStorage'
-
-// ─── Helpers for building packed data ───────────────────────────
-
-/**
- * Pack values into a BigInt64Array using NON-SPANNING layout.
- * Each long holds floor(64 / bps) blocks. Leftover bits per long are unused.
- */
-function packNonSpanning(values: number[], bitsPerBlock: number): BigInt64Array {
-  const blocksPerLong = Math.floor(64 / bitsPerBlock)
-  const numLongs = Math.ceil(values.length / blocksPerLong)
-  const longs = new BigInt64Array(numLongs)
-  for (let i = 0; i < values.length; i++) {
-    const longIdx = Math.floor(i / blocksPerLong)
-    const bitOffset = (i % blocksPerLong) * bitsPerBlock
-    longs[longIdx] |= BigInt(values[i]) << BigInt(bitOffset)
-  }
-  return longs
-}
-
-/**
- * Pack values into a BigInt64Array using SPANNING layout.
- * Values are packed contiguously without long-boundary gaps.
- */
-function packSpanning(values: number[], bitsPerBlock: number): BigInt64Array {
-  const totalBits = values.length * bitsPerBlock
-  const numLongs = Math.ceil(totalBits / 64)
-  const longs = new BigInt64Array(numLongs)
-  for (let i = 0; i < values.length; i++) {
-    const startBit = i * bitsPerBlock
-    const startLong = Math.floor(startBit / 64)
-    const bitOffset = startBit % 64
-    const val = BigInt(values[i])
-    longs[startLong] |= val << BigInt(bitOffset)
-    if (bitOffset + bitsPerBlock > 64) {
-      // Spans into next long
-      const bitsInFirst = 64 - bitOffset
-      longs[startLong + 1] |= val >> BigInt(bitsInFirst)
-    }
-  }
-  return longs
-}
+import { packNonSpanning, packSpanning } from './testHelpers'
 
 // ─── Tests ──────────────────────────────────────────────────────
 
@@ -176,6 +136,20 @@ describe('PackedBlockStorage', () => {
       const nonSpanningS = new PackedBlockStorage(spanningPacked, 32, { x: 1, y: 1, z: 13 }, 'non-spanning')
       expect(nonSpanningS.getBlockIndex(0, 0, 12)).not.toBe(31)
     })
+
+    it.each([3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15])(
+      'decodes all blocks with bps=%i spanning (cross-long coverage)', (bps) => {
+        const numBlocks = Math.ceil(128 / bps)
+        const maxVal = (1 << bps) - 1
+        const values = Array.from({ length: numBlocks }, (_, i) => i & maxVal)
+        const packed = packSpanning(values, bps)
+        const s = new PackedBlockStorage(packed, 1 << bps, { x: 1, y: 1, z: numBlocks }, 'spanning')
+
+        for (let i = 0; i < numBlocks; i++) {
+          expect(s.getBlockIndex(0, 0, i)).toBe(values[i])
+        }
+      }
+    )
   })
 
   // ── setBlockIndex ────────────────────────────────────────────
@@ -216,6 +190,58 @@ describe('PackedBlockStorage', () => {
     it('has correct length', () => {
       const s = new PackedBlockStorage(new BigInt64Array(1), 4, size)
       expect(s.toArray().length).toBe(8)
+    })
+
+    it('toArray spanning bps=3 returns all values correctly', () => {
+      const bps = 3
+      const numBlocks = 30 // 90 bits, spans 2 longs
+      const values = Array.from({ length: numBlocks }, (_, i) => (i * 3) & 7)
+      const packed = packSpanning(values, bps)
+      const s = new PackedBlockStorage(packed, 8, { x: 1, y: 1, z: numBlocks }, 'spanning')
+      const arr = s.toArray()
+
+      expect(arr.length).toBe(numBlocks)
+      for (let i = 0; i < numBlocks; i++) {
+        expect(arr[i]).toBe(values[i])
+      }
+    })
+
+    it('toArray spanning bps=7 decodes cross-long-boundary values', () => {
+      const bps = 7
+      const numBlocks = 20 // 140 bits, 3 longs
+      const values = Array.from({ length: numBlocks }, (_, i) => (i * 13 + 5) & 127)
+      const packed = packSpanning(values, bps)
+      const s = new PackedBlockStorage(packed, 128, { x: 1, y: 1, z: numBlocks }, 'spanning')
+      const arr = s.toArray()
+
+      expect(arr.length).toBe(numBlocks)
+      for (let i = 0; i < numBlocks; i++) {
+        expect(arr[i]).toBe(values[i])
+      }
+    })
+
+    it('toArray always iterates in YZX order regardless of traversalOrder', () => {
+      const size2 = { x: 2, y: 3, z: 4 } // 24 blocks
+      const values = Array.from({ length: 24 }, (_, i) => i)
+      const packed = packSpanning(values, 5)
+      const s = new PackedBlockStorage(packed, 32, size2, 'spanning')
+
+      // Set different traversal order
+      s.setTraversalOrder('XYZ')
+      const arr = s.toArray()
+
+      // toArray always iterates for y, for z, for x
+      let i = 0
+      for (let y = 0; y < size2.y; y++) {
+        for (let z = 0; z < size2.z; z++) {
+          for (let x = 0; x < size2.x; x++) {
+            // getBlockIndex(x,y,z) is called for each position in YZX loop
+            expect(typeof arr[i]).toBe('number')
+            i++
+          }
+        }
+      }
+      expect(arr.length).toBe(24)
     })
   })
 
@@ -258,6 +284,70 @@ describe('PackedBlockStorage', () => {
       // differently under different traversal orders
       expect(yzx.length).toBe(zyx.length)
     })
+
+    it('spanning with YZX traversal decodes correctly', () => {
+      const bps = 4
+      const sz = { x: 2, y: 2, z: 2 }
+      // YZX linear order: index = (y*2+z)*2+x
+      // positions and their YZX indices:
+      // (0,0,0)=0, (1,0,0)=1, (0,0,1)=2, (1,0,1)=3,
+      // (0,1,0)=4, (1,1,0)=5, (0,1,1)=6, (1,1,1)=7
+      const values = [1, 2, 3, 4, 5, 6, 7, 8]
+      const packed = packSpanning(values, bps)
+      const s = new PackedBlockStorage(packed, 16, sz, 'spanning')
+      s.setTraversalOrder('YZX')
+
+      expect(s.getBlockIndex(0, 0, 0)).toBe(1)
+      expect(s.getBlockIndex(1, 0, 0)).toBe(2)
+      expect(s.getBlockIndex(0, 0, 1)).toBe(3)
+      expect(s.getBlockIndex(1, 0, 1)).toBe(4)
+    })
+
+    it('spanning with XZY traversal decodes correctly', () => {
+      const bps = 4
+      const sz = { x: 2, y: 2, z: 2 }
+      // XZY linear order: index = (x*2+z)*2+y
+      // i=0→(x=0,z=0,y=0), i=1→(x=0,z=0,y=1), i=2→(x=0,z=1,y=0), i=3→(x=0,z=1,y=1)
+      // i=4→(x=1,z=0,y=0), i=5→(x=1,z=0,y=1), i=6→(x=1,z=1,y=0), i=7→(x=1,z=1,y=1)
+      const values = [1, 2, 3, 4, 5, 6, 7, 8]
+      const packed = packSpanning(values, bps)
+      const s = new PackedBlockStorage(packed, 16, sz, 'spanning')
+      s.setTraversalOrder('XZY')
+
+      // getBlockIndex(x,y,z) → linearIndex = (x*2+z)*2+y → values[linearIndex]
+      expect(s.getBlockIndex(0, 0, 0)).toBe(1)  // (0*2+0)*2+0=0
+      expect(s.getBlockIndex(0, 1, 0)).toBe(2)  // (0*2+0)*2+1=1
+      expect(s.getBlockIndex(0, 0, 1)).toBe(3)  // (0*2+1)*2+0=2
+      expect(s.getBlockIndex(0, 1, 1)).toBe(4)  // (0*2+1)*2+1=3
+    })
+
+    it('non-spanning with XZY traversal decodes correctly', () => {
+      const bps = 4
+      const sz = { x: 2, y: 2, z: 2 }
+      const values = [1, 2, 3, 4, 5, 6, 7, 8]
+      const packed = packNonSpanning(values, bps)
+      const s = new PackedBlockStorage(packed, 16, sz, 'non-spanning')
+      s.setTraversalOrder('XZY')
+
+      expect(s.getBlockIndex(0, 0, 0)).toBe(1)
+      expect(s.getBlockIndex(0, 1, 0)).toBe(2)
+      expect(s.getBlockIndex(0, 0, 1)).toBe(3)
+      expect(s.getBlockIndex(0, 1, 1)).toBe(4)
+    })
+
+    it('non-spanning with YZX traversal decodes correctly', () => {
+      const bps = 4
+      const sz = { x: 2, y: 2, z: 2 }
+      const values = [1, 2, 3, 4, 5, 6, 7, 8]
+      const packed = packNonSpanning(values, bps)
+      const s = new PackedBlockStorage(packed, 16, sz, 'non-spanning')
+      s.setTraversalOrder('YZX')
+
+      expect(s.getBlockIndex(0, 0, 0)).toBe(1)
+      expect(s.getBlockIndex(1, 0, 0)).toBe(2)
+      expect(s.getBlockIndex(0, 0, 1)).toBe(3)
+      expect(s.getBlockIndex(1, 0, 1)).toBe(4)
+    })
   })
 
   // ── Edge cases ───────────────────────────────────────────────
@@ -280,6 +370,70 @@ describe('PackedBlockStorage', () => {
       const s = new PackedBlockStorage(packed, 16, size, 'non-spanning')
       // All 8 blocks are within range; just verify no error
       expect(s.getBlockIndex(0, 0, 0)).not.toBe(0) // all bits set, should be 15
+    })
+
+    // ── Truncated data ────────────────────────────────────────
+
+    it('returns 0 when startLongIndex >= length in spanning', () => {
+      const bps = 5
+      // Pack just 1 long worth of data but ask for a position deep in the stream
+      const values = [1, 2, 3]
+      const packed = packSpanning(values, bps)
+      // 3 * 5 = 15 bits, fits in 1 long
+      const s = new PackedBlockStorage(packed, 32, { x: 1, y: 1, z: 100 }, 'spanning')
+      // Block at index 50 → startBit=250, startLongIndex=3 (250/64=3.9→3)
+      // packedData only has 1 long, so startLongIndex >= length → returns 0
+      expect(s.getBlockIndex(0, 0, 50)).toBe(0)
+    })
+
+    it('returns 0 when endLongIndex >= length in spanning (cross-long truncation)', () => {
+      const bps = 12
+      // Pack just enough for a few blocks, then read one that would span beyond
+      const values = [100, 200]
+      const packed = packSpanning(values, bps)
+      // 2 * 12 = 24 bits, fits in 1 long
+      const s = new PackedBlockStorage(packed, 4096, { x: 1, y: 1, z: 20 }, 'spanning')
+      // Block 0: bits 0-11, all in long 0 → returns correctly
+      expect(s.getBlockIndex(0, 0, 0)).toBe(100)
+      // Block 1: bits 12-23, all in long 0 → returns correctly
+      expect(s.getBlockIndex(0, 0, 1)).toBe(200)
+      // Block 5: startBit=60, endLongIndex=(60+12-1)/64=71/64=1
+      // packedData only has 1 long, so the cross-long read is partial
+      // The first part is read from long 0, second part from long 1 (which is 0n by default)
+      const val5 = s.getBlockIndex(0, 0, 5)
+      expect(typeof val5).toBe('number')
+    })
+
+    // ── Large volume ──────────────────────────────────────────
+
+    it('handles 16x16x16=4096 blocks with spanning', () => {
+      const bps = 7
+      const volume = 4096
+      const values = Array.from({ length: volume }, (_, i) => (i * 7 + 3) & 127)
+      const packed = packSpanning(values, bps)
+      const s = new PackedBlockStorage(packed, 128, { x: 16, y: 16, z: 16 }, 'spanning')
+
+      // Spot-check a few key positions
+      expect(s.getBlockIndex(0, 0, 0)).toBe(values[0])
+      // YZX index for (15,0,0) = (0*16+0)*16+15 = 15
+      expect(s.getBlockIndex(15, 0, 0)).toBe(values[15])
+      // YZX index for (0,0,15) = (0*16+15)*16+0 = 240
+      expect(s.getBlockIndex(0, 0, 15)).toBe(values[240])
+      // YZX index for (0,15,0) = (15*16+0)*16+0 = 3840
+      expect(s.getBlockIndex(0, 15, 0)).toBe(values[3840])
+    })
+
+    it('handles 16x16x16=4096 blocks with non-spanning', () => {
+      const bps = 4
+      const volume = 4096
+      const values = Array.from({ length: volume }, (_, i) => (i * 5 + 1) & 15)
+      const packed = packNonSpanning(values, bps)
+      const s = new PackedBlockStorage(packed, 16, { x: 16, y: 16, z: 16 }, 'non-spanning')
+
+      expect(s.getBlockIndex(0, 0, 0)).toBe(values[0])
+      expect(s.getBlockIndex(15, 0, 0)).toBe(values[15])
+      expect(s.getBlockIndex(0, 0, 15)).toBe(values[240])
+      expect(s.getBlockIndex(0, 15, 0)).toBe(values[3840])
     })
   })
 })

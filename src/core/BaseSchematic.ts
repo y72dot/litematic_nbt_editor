@@ -93,7 +93,7 @@ export abstract class BaseSchematic implements Schematic {
 
   // ── Static: encode flat block data → packed BigInt64Array ────
 
-  protected static encodeBlockStates(
+  public static encodeBlockStates(
     data: Uint16Array | Uint32Array | number[],
     bitsPerBlock: number,
     size: { x: number; y: number; z: number },
