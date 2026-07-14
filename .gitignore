@@ -25,8 +25,15 @@ dist-ssr
 *.litematic
 .refer/
 .trae/
+.claude/
+CLAUDE.md
 
 coverage
+
+# E2E tests
+e2e/fixtures/
+playwright-report/
+test-results/
 
 # Test scripts
 test_*.ts
@@ -34,3 +41,5 @@ test_*.js
 test_*.cjs
 check_*.js
 check_*.cjs
+
+

@@ -22,4 +22,7 @@ export interface Schematic {
 
   // Rename a block globally
   renameBlock(oldName: string, newName: string): void;
+
+  // Set a block at global coordinates (memory only, rawNbt sync happens in toNbt)
+  setBlock(x: number, y: number, z: number, blockName: string): boolean;
 }

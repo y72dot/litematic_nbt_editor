@@ -1,35 +1,47 @@
 import LitematicViewer from '../../LitematicViewer';
 import DeepslateViewer from '../DeepslateViewer';
-import { Litematic } from '../../core/Litematic';
 import type { Schematic } from '../../core/Schematic';
 import type { TraversalOrder } from '../../core/BlockStorage';
+
+/** Props shared by both 3D viewer components. */
+export interface ViewerRendererProps {
+  litematic: Schematic | null;
+  unpackingMethod?: 'spanning' | 'non-spanning';
+  onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
+  onBlockClick?: (x: number, y: number, z: number, shiftKey: boolean) => void;
+}
 
 interface ViewerPanelProps {
   litematicObj: Schematic | null;
   loading: boolean;
   error: string | null;
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  
-  // Settings
+
   useDeepslate: boolean;
   unpackingMethod: 'spanning' | 'non-spanning';
   traversalOrder: TraversalOrder;
-  
-  // Callbacks
+
   onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
+  onBlockClick?: (x: number, y: number, z: number, shiftKey: boolean) => void;
+  selectedBlocks?: Set<string>;
+  selectedBlockType?: string;
+  structureVersion?: number;
 }
 
-export default function ViewerPanel({ 
-  litematicObj, 
-  loading, 
-  error, 
+export default function ViewerPanel({
+  litematicObj,
+  loading,
+  error,
   onFileUpload,
   useDeepslate,
   unpackingMethod,
   traversalOrder,
-  onHoverBlock
+  onHoverBlock,
+  onBlockClick,
+  selectedBlocks,
+  structureVersion,
 }: ViewerPanelProps) {
-  
+
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: '#111' }}>
       {error && (
@@ -37,7 +49,7 @@ export default function ViewerPanel({
           {error}
         </div>
       )}
-      
+
       {!litematicObj && !loading && (
          <div className="empty-state">
            <div style={{fontSize: '48px', marginBottom: '20px'}}>🧊</div>
@@ -45,11 +57,11 @@ export default function ViewerPanel({
            <p>Open a .litematic file to begin editing</p>
            <label className="upload-btn-large">
               Select File
-              <input 
-                type="file" 
-                accept=".litematic,.nbt,.schematic" 
+              <input
+                type="file"
+                accept=".litematic,.nbt,.schematic"
                 onChange={onFileUpload}
-                style={{display: 'none'}} 
+                style={{display: 'none'}}
               />
            </label>
          </div>
@@ -58,15 +70,18 @@ export default function ViewerPanel({
       {litematicObj && (
          <>
             {useDeepslate ? (
-              <DeepslateViewer 
-                litematic={litematicObj} 
+              <DeepslateViewer
+                litematic={litematicObj}
                 unpackingMethod={unpackingMethod}
                 onHoverBlock={onHoverBlock}
+                onBlockClick={onBlockClick}
+                selectedBlocks={selectedBlocks}
+                structureVersion={structureVersion}
               />
             ) : (
-              <LitematicViewer 
-                litematic={litematicObj} 
-                unpackingMethod={unpackingMethod} 
+              <LitematicViewer
+                litematic={litematicObj}
+                unpackingMethod={unpackingMethod}
                 traversalOrder={traversalOrder}
               />
             )}

@@ -1,6 +1,10 @@
 import { Structure } from 'deepslate';
 import type { Schematic } from '../core/Schematic';
 
+/**
+ * Convert a Schematic to a standalone deepslate Structure.
+ * Used for initial data loading; for live editing, use SchematicStructureProvider instead.
+ */
 export function convertToDeepslateStructure(litematic: Schematic): Structure {
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;

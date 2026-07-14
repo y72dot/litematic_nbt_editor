@@ -340,6 +340,99 @@ describe('Litematic', () => {
     })
   })
 
+  // ── setBlock ─────────────────────────────────────────────────
+
+  describe('setBlock', () => {
+    it('sets a block and getBlock returns it', () => {
+      const nbtValue = makeMockLitematicNbt({
+        regions: {
+          Main: makeMockRegionNbt({
+            size: { x: 3, y: 3, z: 3 },
+            position: { x: 0, y: 0, z: 0 },
+            palette: ['minecraft:air', 'minecraft:stone'],
+          }),
+        },
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const lit = new Litematic(rootTag)
+
+      const result = lit.setBlock(1, 1, 1, 'minecraft:stone')
+      expect(result).toBe(true)
+
+      const block = lit.getBlock(1, 1, 1)
+      expect(block).not.toBeNull()
+      expect(block!.Name).toBe('minecraft:stone')
+    })
+
+    it('sets a block not in palette (auto-adds to palette)', () => {
+      const nbtValue = makeMockLitematicNbt({
+        regions: {
+          Main: makeMockRegionNbt({
+            size: { x: 2, y: 2, z: 2 },
+            position: { x: 0, y: 0, z: 0 },
+            palette: ['minecraft:air'],
+          }),
+        },
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const lit = new Litematic(rootTag)
+
+      const result = lit.setBlock(0, 0, 0, 'minecraft:diamond_block')
+      expect(result).toBe(true)
+
+      const block = lit.getBlock(0, 0, 0)
+      expect(block!.Name).toBe('minecraft:diamond_block')
+
+      // Palette should now include the new block
+      expect(lit.regions[0].palette).toContain('minecraft:diamond_block')
+    })
+
+    it('returns false for out-of-bounds coordinates', () => {
+      const nbtValue = makeMockLitematicNbt({
+        regions: {
+          Main: makeMockRegionNbt({
+            size: { x: 2, y: 2, z: 2 },
+            position: { x: 0, y: 0, z: 0 },
+          }),
+        },
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const lit = new Litematic(rootTag)
+
+      expect(lit.setBlock(100, 100, 100, 'minecraft:stone')).toBe(false)
+    })
+
+    it('setBlock + getBlock round-trip with multiple regions', () => {
+      const nbtValue = makeMockLitematicNbt({
+        regions: {
+          R1: makeMockRegionNbt({
+            size: { x: 2, y: 2, z: 2 },
+            position: { x: 0, y: 0, z: 0 },
+            palette: ['minecraft:air', 'minecraft:stone'],
+          }),
+          R2: makeMockRegionNbt({
+            size: { x: 2, y: 2, z: 2 },
+            position: { x: 10, y: 0, z: 0 },
+            palette: ['minecraft:air', 'minecraft:dirt'],
+          }),
+        },
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const lit = new Litematic(rootTag)
+
+      // Set block in first region
+      lit.setBlock(1, 1, 1, 'minecraft:stone')
+      expect(lit.getBlock(1, 1, 1)!.Name).toBe('minecraft:stone')
+
+      // Set block in second region (offset by 10 in x)
+      lit.setBlock(11, 0, 0, 'minecraft:dirt')
+      expect(lit.getBlock(11, 0, 0)!.Name).toBe('minecraft:dirt')
+
+      // Global (10,0,0) should map to local (0,0,0) of R2
+      expect(lit.getBlock(10, 0, 0)!.Name).toBe('minecraft:air')
+    })
+  })
+
   // ── toNbt ────────────────────────────────────────────────────
 
   describe('toNbt', () => {
@@ -370,6 +463,88 @@ describe('Litematic', () => {
       const result = lit.toNbt()
       expect(result.value.Metadata).toBeDefined()
       expect(result.value.Metadata.type).toBe('compound')
+    })
+
+    it('encodes BlockStates after setBlock', () => {
+      const nbtValue = makeMockLitematicNbt({
+        regions: {
+          Main: makeMockRegionNbt({
+            size: { x: 2, y: 2, z: 2 },
+            position: { x: 0, y: 0, z: 0 },
+            palette: ['minecraft:air', 'minecraft:stone'],
+          }),
+        },
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const lit = new Litematic(rootTag)
+
+      lit.setBlock(0, 0, 0, 'minecraft:stone')
+
+      const result = lit.toNbt()
+      const regionComp = result.value.Regions.value['Main'].value
+
+      // BlockStates should be a valid longArray
+      expect(regionComp.BlockStates).toBeDefined()
+      expect(regionComp.BlockStates.type).toBe('longArray')
+      expect(regionComp.BlockStates.value).toBeInstanceOf(BigInt64Array)
+      expect(regionComp.BlockStates.value.length).toBeGreaterThan(0)
+    })
+
+    it('toNbt round-trip: setBlock → toNbt → parse → getBlock', () => {
+      const nbtValue = makeMockLitematicNbt({
+        regions: {
+          Main: makeMockRegionNbt({
+            size: { x: 3, y: 3, z: 3 },
+            position: { x: 0, y: 0, z: 0 },
+            palette: ['minecraft:air', 'minecraft:stone', 'minecraft:dirt'],
+          }),
+        },
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const lit = new Litematic(rootTag)
+
+      // Modify several blocks
+      lit.setBlock(1, 1, 1, 'minecraft:stone')
+      lit.setBlock(2, 2, 2, 'minecraft:dirt')
+      lit.setBlock(0, 1, 2, 'minecraft:stone')
+
+      // Serialize
+      const saved = lit.toNbt()
+
+      // Parse back (simulate save-reload)
+      const reloaded = new Litematic(saved)
+
+      expect(reloaded.getBlock(1, 1, 1)!.Name).toBe('minecraft:stone')
+      expect(reloaded.getBlock(2, 2, 2)!.Name).toBe('minecraft:dirt')
+      expect(reloaded.getBlock(0, 1, 2)!.Name).toBe('minecraft:stone')
+      expect(reloaded.getBlock(0, 0, 0)!.Name).toBe('minecraft:air')
+    })
+
+    it('syncs palette to rawNbt in toNbt', () => {
+      const nbtValue = makeMockLitematicNbt({
+        regions: {
+          Main: makeMockRegionNbt({
+            size: { x: 1, y: 1, z: 1 },
+            position: { x: 0, y: 0, z: 0 },
+            palette: ['minecraft:air'],
+          }),
+        },
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const lit = new Litematic(rootTag)
+
+      // Add a new block type by setting a block
+      lit.setBlock(0, 0, 0, 'minecraft:emerald_block')
+
+      const result = lit.toNbt()
+      const regionComp = result.value.Regions.value['Main'].value
+      let palette = regionComp.BlockStatePalette.value
+      if (!Array.isArray(palette) && palette?.value) {
+        palette = palette.value
+      }
+
+      const names = palette.map((p: any) => p.Name.value)
+      expect(names).toContain('minecraft:emerald_block')
     })
   })
 })

@@ -243,6 +243,50 @@ describe('Structure', () => {
     })
   })
 
+  // ── setBlock ─────────────────────────────────────────────────
+
+  describe('setBlock', () => {
+    it('sets a block and getBlock returns it', () => {
+      const nbtValue = makeMockStructureNbt({
+        size: { x: 3, y: 3, z: 3 },
+        palette: [
+          { Name: 'minecraft:air' },
+          { Name: 'minecraft:stone' },
+        ],
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const st = new Structure(rootTag)
+
+      const result = st.setBlock(1, 1, 1, 'minecraft:stone')
+      expect(result).toBe(true)
+
+      const block = st.getBlock(1, 1, 1)
+      expect(block).not.toBeNull()
+      expect(block!.Name).toBe('minecraft:stone')
+    })
+
+    it('auto-adds new block type to palette', () => {
+      const nbtValue = makeMockStructureNbt({
+        size: { x: 2, y: 2, z: 2 },
+        palette: [{ Name: 'minecraft:air' }],
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const st = new Structure(rootTag)
+
+      st.setBlock(0, 0, 0, 'minecraft:diamond_block')
+      expect(st.regions[0].palette).toContain('minecraft:diamond_block')
+      expect(st.getBlock(0, 0, 0)!.Name).toBe('minecraft:diamond_block')
+    })
+
+    it('returns false for out-of-bounds', () => {
+      const nbtValue = makeMockStructureNbt({ size: { x: 2, y: 2, z: 2 } })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const st = new Structure(rootTag)
+
+      expect(st.setBlock(100, 100, 100, 'minecraft:stone')).toBe(false)
+    })
+  })
+
   // ── toNbt ────────────────────────────────────────────────────
 
   describe('toNbt', () => {
@@ -254,6 +298,73 @@ describe('Structure', () => {
       const result = st.toNbt()
       expect(result).toBeDefined()
       expect(result.value.size).toBeDefined()
+    })
+
+    it('rebuilds blocks list after setBlock', () => {
+      const nbtValue = makeMockStructureNbt({
+        size: { x: 2, y: 2, z: 2 },
+        palette: [
+          { Name: 'minecraft:air' },
+          { Name: 'minecraft:stone' },
+        ],
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const st = new Structure(rootTag)
+
+      st.setBlock(0, 0, 0, 'minecraft:stone')
+      st.setBlock(1, 1, 1, 'minecraft:stone')
+
+      const result = st.toNbt()
+      const blocks = result.value.blocks.value.value
+
+      // Should have 2 block entries (non-air only)
+      expect(blocks).toHaveLength(2)
+
+      const positions = blocks.map((b: any) => {
+        const p = b.pos.value.value
+        return [p[0].value, p[1].value, p[2].value]
+      })
+      expect(positions).toContainEqual([0, 0, 0])
+      expect(positions).toContainEqual([1, 1, 1])
+    })
+
+    it('toNbt round-trip: setBlock → toNbt → parse → getBlock', () => {
+      const nbtValue = makeMockStructureNbt({
+        size: { x: 3, y: 3, z: 3 },
+        palette: [
+          { Name: 'minecraft:air' },
+          { Name: 'minecraft:stone' },
+          { Name: 'minecraft:dirt' },
+        ],
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const st = new Structure(rootTag)
+
+      st.setBlock(1, 1, 1, 'minecraft:stone')
+      st.setBlock(2, 2, 2, 'minecraft:dirt')
+
+      const saved = st.toNbt()
+      const reloaded = new Structure(saved)
+
+      expect(reloaded.getBlock(1, 1, 1)!.Name).toBe('minecraft:stone')
+      expect(reloaded.getBlock(2, 2, 2)!.Name).toBe('minecraft:dirt')
+      expect(reloaded.getBlock(0, 0, 0)!.Name).toBe('minecraft:air')
+    })
+
+    it('syncs palette to rawNbt after adding new block type', () => {
+      const nbtValue = makeMockStructureNbt({
+        size: { x: 1, y: 1, z: 1 },
+        palette: [{ Name: 'minecraft:air' }],
+      })
+      const rootTag = { type: 'compound', value: nbtValue }
+      const st = new Structure(rootTag)
+
+      st.setBlock(0, 0, 0, 'minecraft:emerald_block')
+
+      const result = st.toNbt()
+      const palette = result.value.palette.value.value
+      const names = palette.map((p: any) => p.Name.value)
+      expect(names).toContain('minecraft:emerald_block')
     })
   })
 })

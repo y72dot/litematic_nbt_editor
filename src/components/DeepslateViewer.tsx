@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Schematic } from '../core/Schematic';
-import { convertToDeepslateStructure } from '../utils/deepslateAdapter';
+import { SchematicStructureProvider } from '../core/SchematicStructureProvider';
 import { BlockDefinition, BlockModel, StructureRenderer, TextureAtlas, type Resources, type ItemRendererResources, Identifier } from 'deepslate';
 import { mat4, vec3 } from 'gl-matrix';
+import { LineRenderer } from '../utils/LineRenderer';
+import { useBlockRaycast } from '../hooks/useBlockRaycast';
 
 // Import assets
 // @ts-ignore
@@ -13,13 +15,18 @@ import defaultPropertiesData from '../assets/litematica/blocks/mc-data-extract.j
 
 // Opaque block sets
 const NON_SELF_CULLING = new Set(['minecraft:leaves', 'minecraft:glass', 'minecraft:glass_pane']);
-const OPAQUE_BLOCKS = new Set(['minecraft:stone', 'minecraft:dirt', 'minecraft:grass_block']); // Simplified
-const TRANSPARENT_BLOCKS = new Set(['minecraft:glass', 'minecraft:water']); // Simplified
+const TRANSPARENT_BLOCKS = new Set(['minecraft:glass', 'minecraft:water']);
+
+const CHUNK_SIZE = 8;
 
 interface DeepslateViewerProps {
   litematic: Schematic | null;
   unpackingMethod?: 'spanning' | 'non-spanning';
   onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
+  onBlockClick?: (x: number, y: number, z: number, shiftKey: boolean) => void;
+  selectedBlocks?: Set<string>;
+  /** Incremented after batch edits to trigger a full GPU buffer rebuild. */
+  structureVersion?: number;
 }
 
 function upperPowerOfTwo(x: number) {
@@ -33,64 +40,65 @@ function upperPowerOfTwo(x: number) {
   return x + 1;
 }
 
-// Check if a block model is geometrically a full 16x16x16 cube
 function isGeometricFullCube(model: any): boolean {
   if (!model || !model.elements) return false;
-  
-  // Most full blocks have exactly one element covering the full range
   if (model.elements.length === 1) {
     const e = model.elements[0];
     return e.from[0] === 0 && e.from[1] === 0 && e.from[2] === 0 &&
            e.to[0] === 16 && e.to[1] === 16 && e.to[2] === 16;
   }
-  
   return false;
 }
 
-import { LineRenderer } from '../utils/LineRenderer';
-import { useBlockRaycast } from '../hooks/useBlockRaycast';
+function getChunkPos(x: number, y: number, z: number): [number, number, number] {
+  return [
+    Math.floor(x / CHUNK_SIZE),
+    Math.floor(y / CHUNK_SIZE),
+    Math.floor(z / CHUNK_SIZE),
+  ];
+}
 
-export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlock }: DeepslateViewerProps) {
+export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlock, onBlockClick, selectedBlocks, structureVersion }: DeepslateViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<StructureRenderer | null>(null);
   const lineRendererRef = useRef<LineRenderer | null>(null);
-  const structureRef = useRef<any>(null); // Store structure for raycasting
-  
+  const providerRef = useRef<SchematicStructureProvider | null>(null);
+  const dirtyChunksRef = useRef<Set<string>>(new Set());
+
   const { getHighlightBlock, onRaycastMouseMove, onRaycastMouseLeave } = useBlockRaycast();
-  
-  // Throttle state updates to avoid React render spam
+
+  // Cached coordinate offset (deepslate local → global)
+  const minOffsetRef = useRef<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
+
+  // Throttle state updates
   const lastHoveredBlockRef = useRef<{ x: number, y: number, z: number } | null>(null);
   const onHoverBlockRef = useRef(onHoverBlock);
-  onHoverBlockRef.current = onHoverBlock; // Keep latest ref
+  onHoverBlockRef.current = onHoverBlock;
+  const onBlockClickRef = useRef(onBlockClick);
+  onBlockClickRef.current = onBlockClick;
 
   const resourcesRef = useRef<Resources & ItemRendererResources | null>(null);
   const [loading, setLoading] = useState(true);
   const requestRef = useRef<number>(0);
   const structureSizeRef = useRef<[number, number, number]>([0, 0, 0]);
 
-  // Camera State - World Position & Euler Angles
+  // Camera State
   const cameraPos = useRef<vec3>(vec3.fromValues(0, 0, 0));
   const cameraFront = useRef<vec3>(vec3.fromValues(0, 0, -1));
   const cameraUp = useRef<vec3>(vec3.fromValues(0, 1, 0));
-  
-  // Yaw: rotation around Y axis (horizontal)
-  // Pitch: rotation around X axis (vertical)
-  const [cameraRotation, setCameraRotation] = useState({ yaw: -90, pitch: 0 }); // Degrees
+  const [cameraRotation, setCameraRotation] = useState({ yaw: -90, pitch: 0 });
   const [moveSpeed, setMoveSpeed] = useState(1.0);
-  
-  // Load Resources
+
+  // ── Load Resources ───────────────────────────────────────────
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      
-      // Load Atlas Image
+
       const img = new Image();
       img.src = atlasUrl;
-      await new Promise((resolve) => {
-        img.onload = resolve;
-      });
+      await new Promise((resolve) => { img.onload = resolve; });
 
-      // Process Resources (Adapted from RedenMC)
       const blockDefinitions: Record<string, BlockDefinition> = {};
       Object.keys(assets.blockstates).forEach((id) => {
         blockDefinitions['minecraft:' + id] = BlockDefinition.fromJson(assets.blockstates[id]);
@@ -104,7 +112,6 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
         m.flatten({ getBlockModel: (id) => blockModels[id.toString()] }),
       );
 
-      // Create Texture Atlas
       const atlasCanvas = document.createElement('canvas');
       const atlasSize = upperPowerOfTwo(Math.max(img.width, img.height));
       atlasCanvas.width = img.width;
@@ -119,10 +126,8 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
         const [u, v, du, dv] = (textureData as any)[id];
         const dv2 = du !== dv && id.startsWith('block/') ? du : dv;
         idMap['minecraft:' + id] = [
-          u / atlasSize,
-          v / atlasSize,
-          (u + du) / atlasSize,
-          (v + dv2) / atlasSize,
+          u / atlasSize, v / atlasSize,
+          (u + du) / atlasSize, (v + dv2) / atlasSize,
         ];
       });
 
@@ -136,33 +141,23 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
         getBlockFlags(id) {
           const name = id.toString();
           let model = blockModels[name];
-          
-          // Try to find the model with 'block/' prefix if not found directly
-          // Most blocks have their models in the 'block/' namespace path
           if (!model) {
             const parts = name.split(':');
             if (parts.length === 2) {
               model = blockModels[`${parts[0]}:block/${parts[1]}`];
             }
           }
-          
-          // 1. Geometric Check: Is it a full 16x16x16 cube?
-          // This automatically handles fences, slabs, stairs, torches, etc.
-          // @ts-ignore - accessing private elements property
           const isSolid = isGeometricFullCube(model);
-
-          // 2. Visual Check: Exclude full cubes that are transparent (Glass, Ice, Slime, etc.)
-          const isVisualTransparent = 
-            TRANSPARENT_BLOCKS.has(name) || 
-            name.includes('glass') || 
-            name.includes('ice') || 
-            name.includes('slime') || 
+          const isVisualTransparent =
+            TRANSPARENT_BLOCKS.has(name) ||
+            name.includes('glass') ||
+            name.includes('ice') ||
+            name.includes('slime') ||
             name.includes('honey');
-
           return {
             opaque: isSolid && !isVisualTransparent,
             self_culling: !NON_SELF_CULLING.has(name),
-            semi_transparent: TRANSPARENT_BLOCKS.has(name)
+            semi_transparent: TRANSPARENT_BLOCKS.has(name),
           };
         },
         getBlockProperties(_id) { return null; },
@@ -178,7 +173,8 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
     load();
   }, []);
 
-  // Initialize Renderer
+  // ── Initialize Renderer ──────────────────────────────────────
+
   useEffect(() => {
     if (!litematic || !resourcesRef.current || !canvasRef.current) return;
 
@@ -189,112 +185,97 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
     const gl = canvasRef.current.getContext('webgl');
     if (!gl) return;
 
-    const structure = convertToDeepslateStructure(litematic);
-    structureRef.current = structure;
-    
-    // Cleanup previous
-    if (rendererRef.current) {
-        // No explicit destroy method on StructureRenderer?
-    }
+    // Create provider wrapping live Schematic data
+    const provider = new SchematicStructureProvider(litematic);
+    providerRef.current = provider;
+
+    // Cache coordinate offset
+    minOffsetRef.current = { x: provider.minX, y: provider.minY, z: provider.minZ };
 
     const renderer = new StructureRenderer(
       gl,
-      structure,
+      provider,
       resourcesRef.current,
-      { chunkSize: 8 }
+      { chunkSize: CHUNK_SIZE },
     );
-    
+
     rendererRef.current = renderer;
     lineRendererRef.current = new LineRenderer(gl);
-    
-    // Initialize Camera to Isometric View
-    const size = structure.getSize();
-    structureSizeRef.current = [size[0], size[1], size[2]];
-    
-    const maxDim = Math.max(size[0], size[1], size[2]);
-    const dist = maxDim * 2.0; // Distance multiplier
 
-    // Position at [dist, dist, dist] looking at [0, 0, 0] (or center)
-    // To look at center of model:
-    // const centerX = size[0] / 2;
-    // const centerY = size[1] / 2;
-    // const centerZ = size[2] / 2;
-    
-    // But user requested "look at origin", so we position relative to origin
+    // Initialize camera
+    const size = provider.getSize();
+    structureSizeRef.current = [size[0], size[1], size[2]];
+
+    const maxDim = Math.max(size[0], size[1], size[2]);
+    const dist = maxDim * 2.0;
     vec3.set(cameraPos.current, dist, dist, dist);
 
-    // Calculate initial Yaw/Pitch to look at origin [0,0,0] from [dist,dist,dist]
-    // Direction vector = normalize(0 - pos) = normalize([-1, -1, -1])
-    // Yaw = atan2(dir.z, dir.x)
-    // Pitch = asin(dir.y)
-    
     const dir = vec3.create();
     vec3.sub(dir, [0, 0, 0], cameraPos.current);
     vec3.normalize(dir, dir);
-
-    // Convert direction vector to Euler angles (degrees)
     const yawRad = Math.atan2(dir[2], dir[0]);
     const pitchRad = Math.asin(dir[1]);
-
     setCameraRotation({
-        yaw: yawRad * (180 / Math.PI),
-        pitch: pitchRad * (180 / Math.PI)
+      yaw: yawRad * (180 / Math.PI),
+      pitch: pitchRad * (180 / Math.PI),
     });
-    
-    // Initial movement speed relative to model size
-    setMoveSpeed(maxDim / 20); // Move 1/20th of model size per frame base speed
+    setMoveSpeed(maxDim / 20);
 
   }, [litematic, loading, unpackingMethod]);
 
-  // Render Loop
+  // ── Full rebuild on structureVersion change (batch edits) ────
+
+  useEffect(() => {
+    if (structureVersion !== undefined && structureVersion > 0 && rendererRef.current) {
+      rendererRef.current.updateStructureBuffers();
+    }
+  }, [structureVersion]);
+
+  // ── Keyboard & Wheel ─────────────────────────────────────────
+
   const pressedKeys = useRef<Set<string>>(new Set());
   const isHovered = useRef(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-        // Only handle keys if mouse is hovering over the viewer
-        if (!isHovered.current) return;
-
-        if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space', 'ShiftLeft'].includes(e.code)) {
-            e.preventDefault(); // Prevent scrolling (especially for Space)
-            pressedKeys.current.add(e.code);
-        }
+      if (!isHovered.current) return;
+      if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space', 'ShiftLeft'].includes(e.code)) {
+        e.preventDefault();
+        pressedKeys.current.add(e.code);
+      }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-        pressedKeys.current.delete(e.code);
+      pressedKeys.current.delete(e.code);
     };
-    
-    // Use non-passive listener for wheel to ensure we can prevent default scrolling
     const handleWheelGlobal = (e: WheelEvent) => {
-        if (isHovered.current) {
-            e.preventDefault();
-            // Scroll to adjust movement speed or FOV? Let's do movement speed for now
-            // Or move forward/backward like a zoom
-            const zoomSpeed = moveSpeed * 5;
-            const forward = vec3.create();
-            vec3.copy(forward, cameraFront.current);
-            vec3.scale(forward, forward, -Math.sign(e.deltaY) * zoomSpeed);
-            vec3.add(cameraPos.current, cameraPos.current, forward);
-        }
+      if (isHovered.current) {
+        e.preventDefault();
+        const zoomSpeed = moveSpeed * 5;
+        const forward = vec3.create();
+        vec3.copy(forward, cameraFront.current);
+        vec3.scale(forward, forward, -Math.sign(e.deltaY) * zoomSpeed);
+        vec3.add(cameraPos.current, cameraPos.current, forward);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('wheel', handleWheelGlobal, { passive: false });
-    
+
     return () => {
-        window.removeEventListener('keydown', handleKeyDown);
-        window.removeEventListener('keyup', handleKeyUp);
-        window.removeEventListener('wheel', handleWheelGlobal);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('wheel', handleWheelGlobal);
     };
-  }, [moveSpeed]); // Dependency on moveSpeed
+  }, [moveSpeed]);
+
+  // ── Render Loop ──────────────────────────────────────────────
 
   useEffect(() => {
     const animate = () => {
-      // Calculate Front Vector from Rotation
+      // Calculate front vector from rotation
       const yawRad = cameraRotation.yaw * Math.PI / 180;
       const pitchRad = cameraRotation.pitch * Math.PI / 180;
-      
       const front = vec3.create();
       front[0] = Math.cos(yawRad) * Math.cos(pitchRad);
       front[1] = Math.sin(pitchRad);
@@ -302,226 +283,219 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
       vec3.normalize(front, front);
       vec3.copy(cameraFront.current, front);
 
-      // Handle Keys (Movement)
+      // Handle key movement
       if (pressedKeys.current.size > 0) {
-        const speed = moveSpeed * 0.5; // Frame speed multiplier
-        const move = vec3.create();
-        
-        // Front/Back
+        const speed = moveSpeed * 0.5;
         if (pressedKeys.current.has('KeyW')) {
-            const f = vec3.create();
-            vec3.scale(f, cameraFront.current, speed);
-            vec3.add(cameraPos.current, cameraPos.current, f);
+          const f = vec3.create();
+          vec3.scale(f, cameraFront.current, speed);
+          vec3.add(cameraPos.current, cameraPos.current, f);
         }
         if (pressedKeys.current.has('KeyS')) {
-            const f = vec3.create();
-            vec3.scale(f, cameraFront.current, -speed);
-            vec3.add(cameraPos.current, cameraPos.current, f);
+          const f = vec3.create();
+          vec3.scale(f, cameraFront.current, -speed);
+          vec3.add(cameraPos.current, cameraPos.current, f);
         }
-
-        // Left/Right (Strafe)
         const right = vec3.create();
         vec3.cross(right, cameraFront.current, cameraUp.current);
         vec3.normalize(right, right);
-
         if (pressedKeys.current.has('KeyA')) {
-            const r = vec3.create();
-            vec3.scale(r, right, -speed);
-            vec3.add(cameraPos.current, cameraPos.current, r);
+          const r = vec3.create();
+          vec3.scale(r, right, -speed);
+          vec3.add(cameraPos.current, cameraPos.current, r);
         }
         if (pressedKeys.current.has('KeyD')) {
-            const r = vec3.create();
-            vec3.scale(r, right, speed);
-            vec3.add(cameraPos.current, cameraPos.current, r);
+          const r = vec3.create();
+          vec3.scale(r, right, speed);
+          vec3.add(cameraPos.current, cameraPos.current, r);
         }
-
-        // Up/Down (World Y)
         if (pressedKeys.current.has('Space')) {
-            const u = vec3.fromValues(0, 1, 0);
-            vec3.scale(u, u, speed);
-            vec3.add(cameraPos.current, cameraPos.current, u);
+          const u = vec3.fromValues(0, 1, 0);
+          vec3.scale(u, u, speed);
+          vec3.add(cameraPos.current, cameraPos.current, u);
         }
         if (pressedKeys.current.has('ShiftLeft')) {
-             const u = vec3.fromValues(0, 1, 0);
-             vec3.scale(u, u, -speed);
-             vec3.add(cameraPos.current, cameraPos.current, u);
+          const u = vec3.fromValues(0, 1, 0);
+          vec3.scale(u, u, -speed);
+          vec3.add(cameraPos.current, cameraPos.current, u);
         }
       }
 
       if (rendererRef.current && canvasRef.current) {
-        // Resize logic
+        // Resize
         const displayWidth = canvasRef.current.clientWidth * window.devicePixelRatio;
         const displayHeight = canvasRef.current.clientHeight * window.devicePixelRatio;
-        
         if (canvasRef.current.width !== displayWidth || canvasRef.current.height !== displayHeight) {
-           canvasRef.current.width = displayWidth;
-           canvasRef.current.height = displayHeight;
-           rendererRef.current.setViewport(0, 0, displayWidth, displayHeight);
+          canvasRef.current.width = displayWidth;
+          canvasRef.current.height = displayHeight;
+          rendererRef.current.setViewport(0, 0, displayWidth, displayHeight);
         }
 
-        // View Matrix (LookAt)
+        // View matrix
         const view = mat4.create();
         const target = vec3.create();
         vec3.add(target, cameraPos.current, cameraFront.current);
         mat4.lookAt(view, cameraPos.current, target, cameraUp.current);
 
+        // ── Process dirty chunks (incremental GPU buffer updates) ──
+        if (dirtyChunksRef.current.size > 0) {
+          const chunkPositions: [number, number, number][] = [];
+          dirtyChunksRef.current.forEach(key => {
+            const [cx, cy, cz] = key.split(',').map(Number);
+            chunkPositions.push([cx, cy, cz]);
+          });
+          rendererRef.current.updateStructureBuffers(chunkPositions);
+          dirtyChunksRef.current.clear();
+        }
+
         rendererRef.current.drawStructure(view);
         rendererRef.current.drawGrid(view);
 
         if (lineRendererRef.current) {
-            const fieldOfView = 70 * Math.PI / 180;
-            const aspect = canvasRef.current.clientWidth / canvasRef.current.clientHeight;
-            const zNear = 0.1;
-            const zFar = 500.0;
-            const projMatrix = mat4.create();
-            mat4.perspective(projMatrix, fieldOfView, aspect, zNear, zFar);
-            
-            // Update Raycaster Props - REMOVED, now using direct method
-            /*
-            updateRaycastProps({
-                structure: structureRef.current,
-                canvas: canvasRef.current,
-                viewMatrix: view,
-                projMatrix: projMatrix,
-                cameraPos: cameraPos.current,
-                cameraFront: cameraFront.current
+          const fieldOfView = 70 * Math.PI / 180;
+          const aspect = canvasRef.current.clientWidth / canvasRef.current.clientHeight;
+          const zNear = 0.1;
+          const zFar = 500.0;
+          const projMatrix = mat4.create();
+          mat4.perspective(projMatrix, fieldOfView, aspect, zNear, zFar);
+
+          const sSize = structureSizeRef.current;
+          lineRendererRef.current.drawBox(
+            view, projMatrix,
+            [0, 0, 0],
+            [sSize[0], sSize[1], sSize[2]],
+            [1, 1, 0], // Yellow box
+          );
+
+          // Raycast using Schematic directly (not deepslate Structure)
+          const hit = getHighlightBlock(
+            litematic,
+            minOffsetRef.current,
+            sSize,
+            canvasRef.current,
+            view,
+            projMatrix,
+          );
+
+          // Draw selected blocks (green boxes)
+          if (selectedBlocks && selectedBlocks.size > 0) {
+            const off = minOffsetRef.current;
+            selectedBlocks.forEach(key => {
+              const parts = key.split(',').map(Number);
+              const gx = parts[0], gy = parts[1], gz = parts[2];
+              const lx = gx - off.x;
+              const ly = gy - off.y;
+              const lz = gz - off.z;
+              lineRendererRef.current!.drawBox(
+                view, projMatrix,
+                [lx, ly, lz],
+                [lx + 1, ly + 1, lz + 1],
+                [0, 0.8, 0.2], // Green selection
+              );
             });
-            */
+          }
 
-            const sSize = structureSizeRef.current;
+          // Draw hover highlight
+          if (hit) {
             lineRendererRef.current.drawBox(
-              view, 
-              projMatrix, 
-              [0, 0, 0], 
-              [sSize[0], sSize[1], sSize[2]], 
-              [1, 1, 0] // Yellow box
+              view, projMatrix,
+              [hit.position[0], hit.position[1], hit.position[2]],
+              [hit.position[0] + 1, hit.position[1] + 1, hit.position[2] + 1],
+              [1, 1, 1], // White highlight
             );
 
-            // Real-time Raycasting
-            const hit = getHighlightBlock(
-                structureRef.current,
-                canvasRef.current,
-                view,
-                projMatrix
-            );
+            const last = lastHoveredBlockRef.current;
+            const pos = hit.position;
+            if (!last || last.x !== pos[0] || last.y !== pos[1] || last.z !== pos[2]) {
+              lastHoveredBlockRef.current = { x: pos[0], y: pos[1], z: pos[2] };
 
-            if (hit) {
-                lineRendererRef.current.drawBox(
-                    view,
-                    projMatrix,
-                    [hit.position[0], hit.position[1], hit.position[2]],
-                    [hit.position[0] + 1, hit.position[1] + 1, hit.position[2] + 1],
-                    [1, 1, 1] // White highlight
+              let name = 'Unknown Block';
+              if (litematic) {
+                const off = minOffsetRef.current;
+                const blockInfo = litematic.getBlock(
+                  pos[0] + off.x, pos[1] + off.y, pos[2] + off.z,
                 );
-                
-                // Notify parent if block changed
-                const last = lastHoveredBlockRef.current;
-                const pos = hit.position;
-                if (!last || last.x !== pos[0] || last.y !== pos[1] || last.z !== pos[2]) {
-                    lastHoveredBlockRef.current = { x: pos[0], y: pos[1], z: pos[2] };
-                    
-                    // Get block name for display
-                    let name = 'Unknown Block';
-                    
-                    // Option 1: Use Litematic raw data (Recommended)
-                    // We need to transform deepslate coordinates back to global coordinates
-                    // convertToDeepslateStructure shifts the structure so minX, minY, minZ is at (0,0,0)
-                    // We need to calculate this offset to reverse it.
-                    
-                    if (litematic) {
-                        let minX = Infinity, minY = Infinity, minZ = Infinity;
-                        litematic.regions.forEach(region => {
-                            minX = Math.min(minX, region.position.x);
-                            minY = Math.min(minY, region.position.y);
-                            minZ = Math.min(minZ, region.position.z);
-                        });
-                        
-                        // If no regions, mins are Infinity, handle that
-                        if (litematic.regions.length === 0) { minX = 0; minY = 0; minZ = 0; }
-                        
-                        const globalX = pos[0] + minX;
-                        const globalY = pos[1] + minY;
-                        const globalZ = pos[2] + minZ;
-                        
-                        const blockInfo = litematic.getBlock(globalX, globalY, globalZ);
-                        if (blockInfo) {
-                            name = blockInfo.Name;
-                        }
-                    } else {
-                        // Fallback to structure query (which failed previously)
-                        const block = structureRef.current?.getBlock([pos[0], pos[1], pos[2]]);
-                        if (block) {
-                             if (typeof block.getName === 'function') name = block.getName();
-                             else if ((block as any).name) name = (block as any).name;
-                        }
-                    }
-                    
-                    if (onHoverBlockRef.current) {
-                        onHoverBlockRef.current({ x: pos[0], y: pos[1], z: pos[2], name });
-                    }
+                if (blockInfo) {
+                  name = blockInfo.Name;
                 }
-            } else {
-                // Clear hover if we moved off a block
-                if (lastHoveredBlockRef.current) {
-                    lastHoveredBlockRef.current = null;
-                    if (onHoverBlockRef.current) {
-                        onHoverBlockRef.current(null);
-                    }
-                }
-            }
+              }
 
-            // Draw axes AFTER the box, with bias, to ensure they appear on top
-            lineRendererRef.current.drawAxes(view, projMatrix, 1000);
+              if (onHoverBlockRef.current) {
+                onHoverBlockRef.current({ x: pos[0], y: pos[1], z: pos[2], name });
+              }
+            }
+          } else {
+            if (lastHoveredBlockRef.current) {
+              lastHoveredBlockRef.current = null;
+              if (onHoverBlockRef.current) {
+                onHoverBlockRef.current(null);
+              }
+            }
+          }
+
+          lineRendererRef.current.drawAxes(view, projMatrix, 1000);
         }
       }
       requestRef.current = requestAnimationFrame(animate);
     };
-    
+
     requestRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(requestRef.current);
-  }, [cameraRotation, moveSpeed]);
+  }, [cameraRotation, moveSpeed, litematic, getHighlightBlock, selectedBlocks]);
 
-  // Mouse Controls
+  // ── Mouse Controls ───────────────────────────────────────────
+
   const isDragging = useRef(false);
+  const hasDragged = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
 
   const handleMouseDown = (e: React.MouseEvent) => {
     isDragging.current = true;
+    hasDragged.current = false;
     lastMouse.current = { x: e.clientX, y: e.clientY };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isDragging.current) {
-        const dx = e.clientX - lastMouse.current.x;
-        const dy = e.clientY - lastMouse.current.y;
-        
-        // Sensitivity
-        const sensitivity = 0.2;
-
-        setCameraRotation(prev => {
-            let newYaw = prev.yaw + dx * sensitivity;
-            let newPitch = prev.pitch - dy * sensitivity;
-
-            // Clamp Pitch to avoid gimbal lock
-            if (newPitch > 89.0) newPitch = 89.0;
-            if (newPitch < -89.0) newPitch = -89.0;
-
-            return { yaw: newYaw, pitch: newPitch };
-        });
-        
-        lastMouse.current = { x: e.clientX, y: e.clientY };
+      const dx = e.clientX - lastMouse.current.x;
+      const dy = e.clientY - lastMouse.current.y;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        hasDragged.current = true;
+      }
+      const sensitivity = 0.2;
+      setCameraRotation(prev => {
+        let newYaw = prev.yaw + dx * sensitivity;
+        let newPitch = prev.pitch - dy * sensitivity;
+        if (newPitch > 89.0) newPitch = 89.0;
+        if (newPitch < -89.0) newPitch = -89.0;
+        return { yaw: newYaw, pitch: newPitch };
+      });
+      lastMouse.current = { x: e.clientX, y: e.clientY };
     } else {
-        // Raycasting
-        onRaycastMouseMove(e);
+      onRaycastMouseMove(e);
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!hasDragged.current && onBlockClickRef.current) {
+      const hovered = lastHoveredBlockRef.current;
+      if (hovered) {
+        const off = minOffsetRef.current;
+        // Mark chunk as dirty for incremental GPU buffer update
+        const [cx, cy, cz] = getChunkPos(hovered.x, hovered.y, hovered.z);
+        dirtyChunksRef.current.add(`${cx},${cy},${cz}`);
+
+        onBlockClickRef.current(
+          hovered.x + off.x, hovered.y + off.y, hovered.z + off.z,
+          e.shiftKey,
+        );
+      }
+    }
     isDragging.current = false;
   };
-  
+
   return (
-    <div 
+    <div
       style={{ width: '100%', height: '100%', background: '#333', position: 'relative' }}
       onMouseEnter={() => { isHovered.current = true; }}
       onMouseLeave={() => { isHovered.current = false; pressedKeys.current.clear(); onRaycastMouseLeave(); }}
@@ -536,7 +510,7 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
         onMouseLeave={handleMouseUp}
       />
       <div style={{position: 'absolute', bottom: 10, left: 10, color: '#aaa', fontSize: '0.8rem'}}>
-        Deepslate Renderer | Drag to Rotate | Scroll to Zoom | WASD + Space/Shift to Move
+        Deepslate Renderer | LMB: Select | Shift+LMB: Multi-select | RMB+Drag: Rotate | Scroll: Zoom | WASD: Move
       </div>
     </div>
   );

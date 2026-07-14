@@ -18,6 +18,10 @@ interface StatusBarProps {
 
   // Interaction Info
   highlightedBlock: { x: number, y: number, z: number, name: string } | null;
+
+  // Undo/Redo
+  undoLabel?: string | null;
+  redoLabel?: string | null;
 }
 
 export default function StatusBar(props: StatusBarProps) {
@@ -26,6 +30,16 @@ export default function StatusBar(props: StatusBarProps) {
       
       {/* Left: Status & Errors */}
       <div className="status-left">
+        {props.undoLabel && (
+          <div className="status-item" style={{ opacity: 0.7 }} title={`Undo: ${props.undoLabel}`}>
+            <span className="status-text" style={{ color: '#aaa' }}>Ctrl+Z: {props.undoLabel}</span>
+          </div>
+        )}
+        {props.redoLabel && (
+          <div className="status-item" style={{ opacity: 0.7 }} title={`Redo: ${props.redoLabel}`}>
+            <span className="status-text" style={{ color: '#aaa' }}>Ctrl+Y: {props.redoLabel}</span>
+          </div>
+        )}
         {props.highlightedBlock ? (
            <div className="status-item highlight-info" style={{ fontWeight: 'bold', color: '#8f8' }}>
               <span className="status-icon">🎯</span>

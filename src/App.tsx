@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import * as nbt from 'prismarine-nbt'
 import pako from 'pako'
 import './App.css'
@@ -14,6 +14,9 @@ import { Litematic } from './core/Litematic'
 import { Structure } from './core/Structure'
 import type { Schematic } from './core/Schematic'
 import type { TraversalOrder } from './core/BlockStorage'
+import { EditHistory } from './core/commands/EditHistory'
+import { SetBlockCommand } from './core/commands/SetBlockCommand'
+import { BatchSetBlockCommand } from './core/commands/BatchSetBlockCommand'
 import type { LitematicMetadata } from './types'
 
 // Panel Components
@@ -104,6 +107,17 @@ function App() {
   const [litematicObj, setLitematicObj] = useState<Schematic | null>(null);
   const [fileName, setFileName] = useState<string>('edited.litematic')
 
+  // Edit history for undo/redo
+  const editHistoryRef = useRef(new EditHistory());
+  const [undoLabel, setUndoLabel] = useState<string | null>(null);
+  const [redoLabel, setRedoLabel] = useState<string | null>(null);
+
+  const syncHistoryState = useCallback(() => {
+    const h = editHistoryRef.current;
+    setUndoLabel(h.undoLabel);
+    setRedoLabel(h.redoLabel);
+  }, []);
+
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   
@@ -114,6 +128,55 @@ function App() {
   
   // Interaction State
   const [highlightedBlock, setHighlightedBlock] = useState<{ x: number, y: number, z: number, name: string } | null>(null);
+  const [selectedBlocks, setSelectedBlocks] = useState<Set<string>>(new Set());
+  const selectedBlockType = 'minecraft:stone';
+  const [structureVersion, setStructureVersion] = useState(0);
+
+  // Handle block click (select single, or shift+click for multi-select)
+  const handleBlockClick = (x: number, y: number, z: number, shiftKey: boolean) => {
+    const key = `${x},${y},${z}`;
+    setSelectedBlocks(prev => {
+      const next = new Set(prev);
+      if (shiftKey) {
+        // Toggle selection
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+      } else {
+        // Replace selection
+        next.clear();
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  // Batch replace all selected blocks with target block type
+  const handleReplaceBlocks = (blockName: string) => {
+    if (!litematicObj || selectedBlocks.size === 0) return;
+    const positions = Array.from(selectedBlocks).map(key => {
+      const [x, y, z] = key.split(',').map(Number);
+      return { x, y, z };
+    });
+    const command = new BatchSetBlockCommand(litematicObj, positions, blockName);
+    editHistoryRef.current.execute(command);
+    syncHistoryState();
+    setSelectedBlocks(new Set());
+    setStructureVersion(v => v + 1);
+    forceUpdate();
+  };
+
+  // Set block at global coordinates (via EditHistory for undo support)
+  const handleSetBlock = (x: number, y: number, z: number, blockName?: string) => {
+    if (!litematicObj) return;
+    const name = blockName ?? selectedBlockType;
+    const command = new SetBlockCommand(litematicObj, x, y, z, name);
+    editHistoryRef.current.execute(command);
+    syncHistoryState();
+    forceUpdate();
+  };
 
   // File Handling
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,6 +188,9 @@ function App() {
     setLitematicObj(null)
     setFileName(file.name)
     setLoading(true)
+    setSelectedBlocks(new Set())
+    editHistoryRef.current.clear()
+    syncHistoryState()
 
     try {
       const arrayBuffer = await file.arrayBuffer()
@@ -276,7 +342,7 @@ function App() {
     switch (component) {
       case 'viewer':
         return (
-          <ViewerPanel 
+          <ViewerPanel
             litematicObj={litematicObj}
             loading={loading}
             error={error}
@@ -285,16 +351,22 @@ function App() {
             unpackingMethod={unpackingMethod}
             traversalOrder={traversalOrder}
             onHoverBlock={setHighlightedBlock}
+            onBlockClick={handleBlockClick}
+            selectedBlocks={selectedBlocks}
+            selectedBlockType={selectedBlockType}
+            structureVersion={structureVersion}
           />
         );
       case 'metadata':
         return <MetadataPanel metadata={metadata} onChange={handleMetadataChange} />;
       case 'palette':
         return (
-          <PalettePanel 
+          <PalettePanel
             litematicObj={litematicObj}
-            onUpdate={handlePaletteUpdate} 
-            getBlockColor={getBlockColor} 
+            onUpdate={handlePaletteUpdate}
+            getBlockColor={getBlockColor}
+            selectedBlocks={selectedBlocks}
+            onReplaceBlocks={handleReplaceBlocks}
           />
         );
       case 'settings':
@@ -365,6 +437,46 @@ function App() {
     }
   };
 
+  // ── Keyboard shortcuts (Ctrl+Z / Ctrl+Y) ─────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+
+      if (e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          // Ctrl+Shift+Z = Redo
+          const label = editHistoryRef.current.redo();
+          if (label) {
+            syncHistoryState();
+            setStructureVersion(v => v + 1);
+            forceUpdate();
+          }
+        } else {
+          // Ctrl+Z = Undo
+          const label = editHistoryRef.current.undo();
+          if (label) {
+            syncHistoryState();
+            setStructureVersion(v => v + 1);
+            forceUpdate();
+          }
+        }
+      } else if (e.key === 'y' || e.key === 'Y') {
+        e.preventDefault();
+        // Ctrl+Y = Redo
+        const label = editHistoryRef.current.redo();
+        if (label) {
+          syncHistoryState();
+          setStructureVersion(v => v + 1);
+          forceUpdate();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [syncHistoryState]);
+
   const isPanelOpen = (component: string) => {
      let isOpen = false;
      model.visitNodes((node) => {
@@ -434,6 +546,8 @@ function App() {
            traversalOrder={traversalOrder}
 
            highlightedBlock={highlightedBlock}
+           undoLabel={undoLabel}
+           redoLabel={redoLabel}
         />
       </div>
 
