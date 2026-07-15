@@ -7,7 +7,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "node e2e/scripts/generate-fixtures.mjs && playwright test --config=e2e/playwright.config.ts",
+    "test:e2e:ui": "node e2e/scripts/generate-fixtures.mjs && playwright test --ui --config=e2e/playwright.config.ts",
+    "pretest:e2e": "node e2e/scripts/generate-fixtures.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
@@ -16,26 +22,32 @@
     "@types/three": "^0.183.1",
     "buffer": "^6.0.3",
     "deepslate": "^0.25.1",
+    "flexlayout-react": "^0.8.19",
+    "gl-matrix": "^3.4.4",
+    "i18next": "^26.3.6",
     "pako": "^2.1.0",
     "prismarine-nbt": "^2.8.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-i18next": "^17.0.9",
     "three": "^0.183.2",
-    "three-stdlib": "^2.36.1",
     "vite-plugin-node-polyfills": "^0.25.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^3.2.4"
   }
 }

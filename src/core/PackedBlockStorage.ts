@@ -129,7 +129,7 @@ export class PackedBlockStorage implements BlockStorage {
     }
   }
 
-  setBlockIndex(x: number, y: number, z: number, index: number): void {
+  setBlockIndex(_x: number, _y: number, _z: number, _index: number): void {
     throw new Error("PackedBlockStorage is Read-Only. Convert to ArrayBlockStorage to edit.");
   }
 

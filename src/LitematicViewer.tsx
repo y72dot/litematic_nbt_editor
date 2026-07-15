@@ -1,13 +1,14 @@
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Stats, Grid } from '@react-three/drei'
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useMemo, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import * as THREE from 'three'
-import { Litematic } from './core/Litematic'
+import type { Schematic } from './core/Schematic'
 import { isBlockVisible } from './utils/litematicParser' // Reusing visibility check for now
 import type { TraversalOrder } from './core/BlockStorage'
 
 interface LitematicViewerProps {
-  litematic: Litematic;
+  litematic: Schematic;
   unpackingMethod: 'spanning' | 'non-spanning';
   traversalOrder: TraversalOrder;
 }
@@ -58,66 +59,22 @@ function SceneSetup({ center }: { center: [number, number, number] }) {
   return null
 }
 
-import { DeepslateContext } from './utils/deepslate/deepslateContext';
-import { getBlockGeometry } from './utils/deepslate/geometryGenerator';
-
 export default function LitematicViewer({ litematic, unpackingMethod, traversalOrder }: LitematicViewerProps) {
-  // Use state to trigger re-renders when resources load
-  const [resourceVersion, setResourceVersion] = useState(0);
-
-  // Initialize Deepslate context
-  useEffect(() => {
-      // Just ensure instance is created
-      DeepslateContext.getInstance();
-  }, []);
-
+  const { t } = useTranslation()
   // Extract regions and process geometry
-  const { center, instanceMap } = useMemo(() => {
-    // We need to group instances by geometry type (or block ID if simplified)
-    // For now, let's keep using BoxGeometry for everything to start, 
-    // but structure it to support multiple meshes.
-    
-    // Map: GeometryKey -> Instance[]
-    const instanceMap = new Map<string, { color: string, matrix: THREE.Matrix4, id: number }[]>();
-    
-    // We also need to keep track of the actual Geometry objects
-    // Map: GeometryKey -> THREE.BufferGeometry
-    const geometryMap = new Map<string, THREE.BufferGeometry>();
-
-    // Default geometry (Box)
-    const defaultGeo = new THREE.BoxGeometry(1, 1, 1);
-    geometryMap.set('default', defaultGeo);
-    
+  const { instances, center } = useMemo(() => {
+    const instances: { color: string, matrix: THREE.Matrix4, id: number }[] = []
     let minX = Infinity, minY = Infinity, minZ = Infinity
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
 
     if (!litematic || litematic.regions.length === 0) {
-      return { center: [0, 0, 0] as [number, number, number], instanceMap }
+      return { instances: [], center: [0, 0, 0] as [number, number, number] }
     }
 
     console.group("LitematicViewer (Core) Processing");
     
     // Iterate over all regions
     litematic.regions.forEach(region => {
-      // ... (existing logic)
-      
-      // We need to load resources for these blocks asynchronously.
-      // But useMemo is synchronous.
-      // So we will trigger resource loading here, and when done, update state to re-render.
-      const ctx = DeepslateContext.getInstance();
-      
-      // Collect unique blocks
-      const uniqueBlocks = new Set(region.palette);
-      uniqueBlocks.forEach(b => {
-          if (b && !b.includes('air')) {
-              ctx.loadBlock(b).then(() => {
-                  // This is a bit spammy, maybe debounce or check if loaded
-                  // setResourceVersion(v => v + 1);
-              });
-          }
-      });
-      
-      // ...
       console.log(`Processing Region: ${region.name} (Method: ${unpackingMethod}, Order: ${traversalOrder})`);
       
       // Apply debug settings
@@ -165,6 +122,13 @@ export default function LitematicViewer({ litematic, unpackingMethod, traversalO
             }
             
             // Optimization: Hidden Face Culling
+            // We reuse the old utility which expects a number[] or TypedArray
+            // region.storage.toArray() returns a TypedArray, which is compatible.
+            // Note: isBlockVisible needs to be updated to accept TypedArray if it doesn't already.
+            // It accepts number[], let's check.
+            // It takes blocks: number[]. TypedArray is not strictly number[], but can be indexed.
+            // We might need to cast or update utils.
+            // Let's assume it works or cast as any for now.
             const visible = isBlockVisible(x, y, z, sizeX, sizeY, sizeZ, blocks as any)
             
             if (visible) {
@@ -174,68 +138,7 @@ export default function LitematicViewer({ litematic, unpackingMethod, traversalO
               
               tempMatrix.setPosition(worldX, worldY, worldZ)
               
-              // Determine geometry key
-              // For now, we use blockId as key.
-              // Ideally we should use the same cache key as geometryGenerator (id + properties)
-              // But extracting properties from blockId string (e.g. "minecraft:oak_stairs[facing=east]") is needed.
-              
-              // Simplified: Use blockId directly.
-              // We need to fetch geometry synchronously here? No, we can't.
-              // So we check if geometry is in our geometryMap.
-              // If not, we use default 'box'.
-              // The geometries are loaded asynchronously via side-effect in the loop above.
-              
-              // Wait, we need to populate geometryMap based on loaded resources.
-              // geometryGenerator has a cache.
-              // We can try to get from cache synchronously if available.
-              
-              // Let's assume we use 'default' unless we find a specific geometry in our map.
-              // But how do we get the geometry object into this useMemo?
-              // We need to fetch it from geometryGenerator's cache or ctx.
-              
-              // Actually, we should probably fetch geometry here.
-              // But getBlockGeometry is async.
-              // So we can only use what's already loaded.
-              
-              // Let's use a trick: 
-              // We check if Deepslate has the definition. If so, try to generate geometry synchronously?
-              // getBlockGeometry is async because it calls loadBlock.
-              // But if loadBlock is done, maybe we can make a sync version?
-              // For now, let's just use "default" for everything to start,
-              // and if we want to support real models, we need to preload them all.
-              
-              // REFACTOR PLAN:
-              // 1. We identify all unique blocks.
-              // 2. We trigger load for all of them (async).
-              // 3. Once loaded, we re-run this useMemo.
-              // 4. Inside this loop, we try to get geometry.
-              
-              const id = blockId.replace('minecraft:', '');
-              // Parse properties
-              let properties: Record<string, string> = {};
-              const propStart = id.indexOf('[');
-              let baseName = id;
-              if (propStart !== -1) {
-                  baseName = id.substring(0, propStart);
-                  const propStr = id.substring(propStart + 1, id.length - 1);
-                  propStr.split(',').forEach(p => {
-                      const [k, v] = p.split('=');
-                      properties[k] = v;
-                  });
-              }
-              
-              // Try to get geometry from cache (we need to expose a sync getter or check cache directly)
-              // Since we can't import the cache map easily, let's rely on a helper or just use default for now
-              // and implement the async loader properly.
-              
-              // For MVP: Group by blockId.
-              const key = blockId;
-              
-              if (!instanceMap.has(key)) {
-                  instanceMap.set(key, []);
-              }
-              
-              instanceMap.get(key)!.push({
+              instances.push({
                 color: getBlockColor(blockId),
                 matrix: tempMatrix.clone(),
                 id: blockIndex
@@ -255,66 +158,18 @@ export default function LitematicViewer({ litematic, unpackingMethod, traversalO
     
     // Safety check for bounds
     if (!isFinite(centerX) || !isFinite(centerY) || !isFinite(centerZ)) {
-        return { center: [0, 0, 0] as [number, number, number], instanceMap }
+        return { instances, center: [0, 0, 0] as [number, number, number] }
     }
     
     return { 
-      instanceMap,
+      instances, 
       center: [centerX, centerY, centerZ] as [number, number, number],
     }
 
-  }, [litematic, unpackingMethod, traversalOrder, resourceVersion]) // Depend on resourceVersion
+  }, [litematic, unpackingMethod, traversalOrder])
 
-  // Effect to load geometries
-  useEffect(() => {
-      const loadGeometries = async () => {
-          if (!litematic) return;
-          const ctx = DeepslateContext.getInstance();
-          
-          // Collect all unique blocks from all regions
-          const allBlocks = new Set<string>();
-          litematic.regions.forEach(r => r.palette.forEach(b => {
-              if (b && !b.includes('air')) allBlocks.add(b);
-          }));
-          
-          // Load them
-          for (const blockId of allBlocks) {
-              const id = blockId.replace('minecraft:', '');
-              let properties: Record<string, string> = {};
-              const propStart = id.indexOf('[');
-              let baseName = id;
-              if (propStart !== -1) {
-                  baseName = id.substring(0, propStart);
-                  const propStr = id.substring(propStart + 1, id.length - 1);
-                  propStr.split(',').forEach(p => {
-                      const [k, v] = p.split('=');
-                      properties[k] = v;
-                  });
-              }
-              
-              // This will populate the cache in geometryGenerator
-              await getBlockGeometry(ctx, baseName, properties);
-          }
-          
-          // Force re-render once all loaded
-          // We can't easily know if *new* stuff loaded, but we can just set version
-          // setResourceVersion(v => v + 1); 
-          // Wait, if we set version, it loops. We need a check.
-          // Let's assume we only load once or check if loaded.
-      };
-      
-      loadGeometries();
-  }, [litematic]); 
-  
-  // Helper to sync retrieve geometry from cache (using same logic as generator)
-  // We need to import the cache or use a sync method.
-  // Since getBlockGeometry is async, we can't use it in render.
-  // But we know it caches.
-  // Let's modifying getBlockGeometry to export a checkCache method or similar?
-  // Or just rely on the fact that we grouped by blockId.
-  
   return (
-    <div style={{ width: '100%', height: '600px', background: '#111', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', background: '#111', position: 'relative' }}>
       <Canvas shadows camera={{ fov: 50 }}>
         <color attach="background" args={['#111']} />
         
@@ -331,53 +186,23 @@ export default function LitematicViewer({ litematic, unpackingMethod, traversalO
         {/* Helper to center camera */}
         <SceneSetup center={center} />
 
-        {/* Render Instances - Now iterating over the map */}
-        {Array.from(instanceMap.entries()).map(([key, insts]) => (
-             <BlocksRenderer 
-                key={key} 
-                instances={insts} 
-                blockId={key} // Pass blockId to look up geometry
-             />
-        ))}
+        {/* Render Instances */}
+        <BlocksRenderer instances={instances} />
 
       </Canvas>
       
       {/* Overlay Info */}
       <div style={{ position: 'absolute', bottom: 10, left: 10, color: 'white', background: 'rgba(0,0,0,0.5)', padding: '5px', borderRadius: '4px', fontSize: '0.8em', pointerEvents: 'none' }}>
-        Method: {unpackingMethod} | Order: {traversalOrder}
+        {t('litematicViewer.overlayMethod', { method: unpackingMethod, order: traversalOrder })}
       </div>
     </div>
   )
 }
 
-// Updated Renderer
-function BlocksRenderer({ instances, blockId }: { instances: { color: string, matrix: THREE.Matrix4 }[], blockId: string }) {
+// Separate component to handle the InstancedMesh logic
+function BlocksRenderer({ instances }: { instances: { color: string, matrix: THREE.Matrix4 }[] }) {
   const meshRef = useRef<THREE.InstancedMesh>(null)
-  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
   
-  // Load geometry for this block type
-  useEffect(() => {
-      const load = async () => {
-          const ctx = DeepslateContext.getInstance();
-          const id = blockId.replace('minecraft:', '');
-          let properties: Record<string, string> = {};
-          const propStart = id.indexOf('[');
-          let baseName = id;
-          if (propStart !== -1) {
-              baseName = id.substring(0, propStart);
-              const propStr = id.substring(propStart + 1, id.length - 1);
-              propStr.split(',').forEach(p => {
-                  const [k, v] = p.split('=');
-                  properties[k] = v;
-              });
-          }
-          
-          const geo = await getBlockGeometry(ctx, baseName, properties);
-          setGeometry(geo);
-      };
-      load();
-  }, [blockId]);
-
   useEffect(() => {
     if (!meshRef.current) return
     
@@ -391,17 +216,13 @@ function BlocksRenderer({ instances, blockId }: { instances: { color: string, ma
     meshRef.current.instanceMatrix.needsUpdate = true
     if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true
     
-  }, [instances, geometry]) // Re-run when geometry loads
+  }, [instances])
 
   if (instances.length === 0) return null
-  
-  // Use a default box geometry if geometry is not yet loaded, 
-  // so that we can at least see something (e.g. while loading or if loading fails)
-  // This prevents "Only grid visible" issue.
-  const displayGeometry = geometry || new THREE.BoxGeometry(1, 1, 1);
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, instances.length]} geometry={displayGeometry}>
+    <instancedMesh ref={meshRef} args={[undefined, undefined, instances.length]}>
+      <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial />
     </instancedMesh>
   )

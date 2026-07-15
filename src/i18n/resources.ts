@@ -1,0 +1,181 @@
+export interface TranslationResources {
+  common: {
+    processing: string
+    noFileLoaded: string
+    ready: string
+    unknownSize: string
+    unknownBlock: string
+  }
+  app: {
+    title: string
+    about: string
+    statusReady: string
+    statusWaiting: string
+    errorParseFile: string
+    errorSaveFile: string
+    edgeWarning: string
+    edgeDismiss: string
+  }
+  tabs: {
+    viewer3d: string
+    tools: string
+    selection: string
+    swatches: string
+    history: string
+    metadata: string
+    settings: string
+    rawNbt: string
+  }
+  menu: {
+    file: string
+    render: string
+    window: string
+    help: string
+    open: string
+    save: string
+    exportAs: string
+    exportLitematic: string
+    exportNbt: string
+    reset: string
+    shortcutCtrlO: string
+    shortcutCtrlS: string
+    sectionEngine: string
+    engineDeepslate: string
+    engineThreeJs: string
+    sectionUnpacking: string
+    unpackingNonSpanning: string
+    unpackingSpanning: string
+    sectionOrder: string
+    panelTools: string
+    panelSelection: string
+    panelSwatches: string
+    panelHistory: string
+    panelMetadata: string
+    panelSettings: string
+    panelNbt: string
+    panelViewerAlwaysOpen: string
+    aboutItem: string
+    deepslateGithub: string
+  }
+  statusBar: {
+    undoPrefix: string
+    redoPrefix: string
+    regionCount_one: string
+    regionCount_other: string
+    format: string
+    engineDeepslate: string
+    engineThreeJs: string
+  }
+  toolPanel: {
+    sectionMode: string
+    modeSelection: string
+    modeEditing: string
+    sectionEditingTools: string
+    toolPlace: string
+    hintPlace: string
+    toolReplace: string
+    hintReplace: string
+    toolErase: string
+    hintErase: string
+    toolFill: string
+    hintFill: string
+    toolPick: string
+    hintPick: string
+    sectionActiveBlock: string
+    searchPlaceholder: string
+    noBlocksMatch: string
+    sectionRecent: string
+    recentTooltip: string
+  }
+  selectionPanel: {
+    sectionMode: string
+    modeSelection: string
+    modeEditing: string
+    sectionSelectionTools: string
+    toolPoint: string
+    hintPoint: string
+    toolBox: string
+    hintBox: string
+    toolSimilar: string
+    hintSimilar: string
+    sectionModifier: string
+    modifierReplace: string
+    hintReplace: string
+    modifierAdd: string
+    hintAdd: string
+    modifierSubtract: string
+    hintSubtract: string
+    keyboardHint: string
+    selectedCount_one: string
+    selectedCount_other: string
+    noBlocksSelected: string
+    bbox: string
+    selectAll: string
+    deselect: string
+    selectSimilar: string
+    hintSelectSimilar: string
+    invert: string
+    hintInvert: string
+    modeHintSelection: string
+    modeHintEditing: string
+  }
+  swatchesPanel: {
+    searchPlaceholder: string
+    noFileLoaded: string
+    noBlocksMatch: string
+    footerHasSelection: string
+    footerNoSelection: string
+    activeBlockBadge: string
+    tooltipHasSelection: string
+    tooltipNoSelection: string
+  }
+  historyPanel: {
+    undo: string
+    undoPrefix: string
+    redo: string
+    redoPrefix: string
+    noHistory: string
+    currentState: string
+    jumpTooltip: string
+    footerActions_one: string
+    footerActions_other: string
+    footerUndone_one: string
+    footerUndone_other: string
+  }
+  settingsPanel: {
+    labelRenderer: string
+    optionDeepslate: string
+    optionThreeJs: string
+    labelUnpacking: string
+    optionNonSpanning: string
+    optionSpanning: string
+    labelTraversal: string
+    optionYzx: string
+    note: string
+  }
+  metadataPanel: {
+    noActiveSelection: string
+    labelName: string
+    labelAuthor: string
+    labelDescription: string
+    labelSize: string
+    labelRegions: string
+    labelCreated: string
+    labelModified: string
+  }
+  viewerPanel: {
+    noModelLoaded: string
+    openPrompt: string
+    selectFile: string
+  }
+  deepslateViewer: {
+    loadingResources: string
+    hintSelection: string
+    hintEditing: string
+    hintDefault: string
+  }
+  litematicViewer: {
+    overlayMethod: string
+  }
+  nbtPanel: Record<string, never>
+}

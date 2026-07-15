@@ -8,54 +8,83 @@ export class Region {
   public size: { x: number, y: number, z: number };
   public position: { x: number, y: number, z: number };
   public palette: string[];
+  public fullPalette: { Name: string, Properties?: Record<string, string> }[];
   public storage: BlockStorage;
 
   constructor(name: string, rawRegionData: any, defaultMethod: 'spanning' | 'non-spanning' = 'non-spanning') {
     this.name = name;
     
-    // Parse dimensions
-    const sizeX = rawRegionData.Size.value.x.value;
-    const sizeY = rawRegionData.Size.value.y.value;
-    const sizeZ = rawRegionData.Size.value.z.value;
-    
-    const posX = rawRegionData.Position.value.x.value;
-    const posY = rawRegionData.Position.value.y.value;
-    const posZ = rawRegionData.Position.value.z.value;
+    if (rawRegionData) {
+      // Parse dimensions
+      const sizeX = rawRegionData.Size.value.x.value;
+      const sizeY = rawRegionData.Size.value.y.value;
+      const sizeZ = rawRegionData.Size.value.z.value;
+      
+      const posX = rawRegionData.Position.value.x.value;
+      const posY = rawRegionData.Position.value.y.value;
+      const posZ = rawRegionData.Position.value.z.value;
 
-    // Handle negative sizes
-    this.size = { x: Math.abs(sizeX), y: Math.abs(sizeY), z: Math.abs(sizeZ) };
-    
-    // Adjust position if size is negative
-    // Litematic: if size is negative, the region starts at pos + size (conceptually)
-    this.position = {
-      x: sizeX < 0 ? posX + sizeX : posX,
-      y: sizeY < 0 ? posY + sizeY : posY,
-      z: sizeZ < 0 ? posZ + sizeZ : posZ
-    };
+      // Handle negative sizes
+      this.size = { x: Math.abs(sizeX), y: Math.abs(sizeY), z: Math.abs(sizeZ) };
+      
+      // Adjust position if size is negative
+      // Litematic: if size is negative, the region starts at pos + size (conceptually)
+      this.position = {
+        x: sizeX < 0 ? posX + sizeX : posX,
+        y: sizeY < 0 ? posY + sizeY : posY,
+        z: sizeZ < 0 ? posZ + sizeZ : posZ
+      };
 
-    // Parse Palette
-    // Handle wrapped lists
-    let rawPalette = rawRegionData.BlockStatePalette.value;
-    if (!Array.isArray(rawPalette) && rawPalette && rawPalette.value && Array.isArray(rawPalette.value)) {
-      rawPalette = rawPalette.value;
+      // Parse Palette
+      // Handle wrapped lists
+      let rawPalette = rawRegionData.BlockStatePalette.value;
+      if (!Array.isArray(rawPalette) && rawPalette && rawPalette.value && Array.isArray(rawPalette.value)) {
+        rawPalette = rawPalette.value;
+      }
+      
+      this.palette = Array.isArray(rawPalette) 
+        ? rawPalette.map((p: any) => p.Name ? p.Name.value : "unknown")
+        : [];
+
+      this.fullPalette = Array.isArray(rawPalette)
+        ? rawPalette.map((p: any) => {
+            const props: Record<string, string> = {};
+            if (p.Properties && p.Properties.value) {
+              Object.entries(p.Properties.value).forEach(([key, val]: [string, any]) => {
+                props[key] = val.value;
+              });
+            }
+            return {
+              Name: p.Name ? p.Name.value : "unknown",
+              Properties: Object.keys(props).length > 0 ? props : undefined
+            };
+          })
+        : [];
+
+      // Initialize Storage
+      // Default to Packed storage for read efficiency
+      const blockStates = rawRegionData.BlockStates.value;
+      this.storage = new PackedBlockStorage(blockStates, this.palette.length, this.size, defaultMethod);
+    } else {
+      // Manual initialization path
+      this.size = { x: 0, y: 0, z: 0 };
+      this.position = { x: 0, y: 0, z: 0 };
+      this.palette = [];
+      this.fullPalette = [];
+      this.storage = new ArrayBlockStorage({x:0, y:0, z:0}, 0, new Int32Array(0));
     }
-    
-    this.palette = Array.isArray(rawPalette) 
-      ? rawPalette.map((p: any) => p.Name ? p.Name.value : "unknown")
-      : [];
-
-    // Initialize Storage
-    // Default to Packed storage for read efficiency
-    // We can auto-detect version or allow override.
-    // For now, let's try to detect if the data looks valid with non-spanning (default)
-    // or provide a switch.
-    
-    const blockStates = rawRegionData.BlockStates.value;
-    
-    // We default to 'non-spanning' (1.16+) as it is modern standard.
-    // If we need to support old files, we might need a heuristic or user input.
-    this.storage = new PackedBlockStorage(blockStates, this.palette.length, this.size, defaultMethod);
   }
+
+  static createFromData(name: string, size: {x: number, y: number, z: number}, position: {x: number, y: number, z: number}, fullPalette: {Name: string, Properties?: Record<string, string>}[], storage: BlockStorage): Region {
+    const region = new Region(name, null);
+    region.size = size;
+    region.position = position;
+    region.fullPalette = fullPalette;
+    region.palette = fullPalette.map(p => p.Name);
+    region.storage = storage;
+    return region;
+  }
+
 
   // Switch to editable storage (unpacks everything)
   enableEditing() {
