@@ -193,6 +193,10 @@ function App() {
   const [activeBlockType, setActiveBlockType] = useState('minecraft:stone');
   const [structureVersion, setStructureVersion] = useState(0);
 
+  // Edge mouse gesture warning
+  const isEdge = /Edg\//.test(navigator.userAgent);
+  const [edgeWarningDismissed, setEdgeWarningDismissed] = useState(false);
+
   // ── Selection helpers ────────────────────────────────────────
 
   const isInSelection = useCallback((x: number, y: number, z: number): boolean => {
@@ -930,6 +934,17 @@ function App() {
         {loading && <span style={{marginLeft: 'auto', marginRight: '15px', fontSize: '12px', color: '#aaa'}}>Processing...</span>}
         {!loading && fileName && <span style={{marginLeft: 'auto', marginRight: '15px', fontSize: '12px', color: '#888'}}>{fileName}</span>}
       </div>
+
+      {/* 1.5 Edge Mouse Gesture Warning */}
+      {isEdge && !edgeWarningDismissed && (
+        <div className="edge-warning-banner">
+          <span>
+            <strong>Microsoft Edge</strong>: Right-drag may trigger browser mouse gesture navigation.
+            Paste <code>edge://settings/appearance/browserBehavior/mouseGestures</code> in address bar to disable it.
+          </span>
+          <button onClick={() => setEdgeWarningDismissed(true)}>Dismiss</button>
+        </div>
+      )}
 
       {/* 2. Main Workspace (FlexLayout) */}
       <div className="workspace" style={{position: 'relative'}}>

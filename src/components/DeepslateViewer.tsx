@@ -524,7 +524,7 @@ export default function DeepslateViewer({
     return () => cancelAnimationFrame(requestRef.current);
   }, [cameraRotation, moveSpeed, litematic, getHighlightBlock, selectedBlocks, boxSelectionState, interactionMode]);
 
-  // ── Mouse Controls ───────────────────────────────────────────
+  // ── Mouse Controls (Three.js-style: document-level listeners during drag) ──
 
   const isDragging = useRef(false);
   const isRightDrag = useRef(false);
@@ -532,99 +532,133 @@ export default function DeepslateViewer({
   const lastMouse = useRef({ x: 0, y: 0 });
   const isBoxSelecting = useRef(false);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Prevent ALL default browser actions on the canvas:
-    // - Right-click context menu / gesture navigation
-    // - Text selection on drag
-    // - Middle-click auto-scroll
-    // - Drag-and-drop
-    e.preventDefault();
+  // Keep refs in sync for use inside native event handlers
+  const interactionModeRef = useRef(interactionMode);
+  interactionModeRef.current = interactionMode;
+  const selectionModeRef = useRef(selectionMode);
+  selectionModeRef.current = selectionMode;
 
-    isDragging.current = true;
-    hasDragged.current = false;
-    isRightDrag.current = e.button === 2;
-    lastMouse.current = { x: e.clientX, y: e.clientY };
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const doc = canvas.ownerDocument;
 
-    // Selection + Box mode: start box selection on left mouse
-    if (e.button === 0 && interactionMode === 'selection' && selectionMode === 'box') {
-      const hovered = lastHoveredBlockRef.current;
-      if (hovered) {
-        isBoxSelecting.current = true;
-        const off = minOffsetRef.current;
-        onBoxSelectStartRef.current?.(hovered.x + off.x, hovered.y + off.y, hovered.z + off.z);
-      }
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    mousePosRef.current = { x: e.clientX, y: e.clientY };
-
-    if (isDragging.current && isRightDrag.current) {
-      // Right drag: rotate camera (always available)
-      const dx = e.clientX - lastMouse.current.x;
-      const dy = e.clientY - lastMouse.current.y;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        hasDragged.current = true;
-      }
-      const sensitivity = 0.2;
-      setCameraRotation(prev => {
-        let newYaw = prev.yaw + dx * sensitivity;
-        let newPitch = prev.pitch - dy * sensitivity;
-        if (newPitch > 89.0) newPitch = 89.0;
-        if (newPitch < -89.0) newPitch = -89.0;
-        return { yaw: newYaw, pitch: newPitch };
-      });
+    // ── canvas-level: start drag + attach document listeners ──
+    const onMouseDown = (e: MouseEvent) => {
+      isDragging.current = true;
+      hasDragged.current = false;
+      isRightDrag.current = e.button === 2;
       lastMouse.current = { x: e.clientX, y: e.clientY };
-    } else if (isDragging.current && isBoxSelecting.current) {
-      // Left drag during box selection
-      hasDragged.current = true;
-      lastMouse.current = { x: e.clientX, y: e.clientY };
-      // Box select update is handled via animation loop raycast
-    } else if (isDragging.current && !isRightDrag.current) {
-      // Left drag without box select — track for potential drag detection
-      const dx = e.clientX - lastMouse.current.x;
-      const dy = e.clientY - lastMouse.current.y;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        hasDragged.current = true;
-      }
-    } else {
-      onRaycastMouseMove(e);
-    }
-  };
 
-  const handleMouseUp = (e: React.MouseEvent) => {
-    if (isBoxSelecting.current) {
-      // End box selection
-      isBoxSelecting.current = false;
-      onBoxSelectEndRef.current?.();
-    } else if (!hasDragged.current && e.button === 0) {
-      // Single click (no drag)
-      const hovered = lastHoveredBlockRef.current;
-      if (hovered) {
-        const off = minOffsetRef.current;
-        const gx = hovered.x + off.x;
-        const gy = hovered.y + off.y;
-        const gz = hovered.z + off.z;
+      // Attach document-level listeners for the duration of the drag
+      doc.addEventListener('mousemove', onMouseMove);
+      doc.addEventListener('mouseup', onMouseUp);
 
-        // Mark chunk as dirty for incremental GPU buffer update
-        const [cx, cy, cz] = getChunkPos(hovered.x, hovered.y, hovered.z);
-        dirtyChunksRef.current.add(`${cx},${cy},${cz}`);
-
-        if (interactionMode === 'selection') {
-          onSelectionClickRef.current?.(gx, gy, gz, e.ctrlKey || e.metaKey, e.altKey);
-        } else if (interactionMode === 'editing') {
-          onEditClickRef.current?.(gx, gy, gz);
+      // Selection + Box mode: start box selection on left mouse
+      if (e.button === 0 && interactionModeRef.current === 'selection' && selectionModeRef.current === 'box') {
+        const hovered = lastHoveredBlockRef.current;
+        if (hovered) {
+          isBoxSelecting.current = true;
+          const off = minOffsetRef.current;
+          onBoxSelectStartRef.current?.(hovered.x + off.x, hovered.y + off.y, hovered.z + off.z);
         }
       }
-    }
-    isDragging.current = false;
-    isRightDrag.current = false;
-  };
+    };
 
-  // Prevent context menu on canvas
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-  };
+    // ── document-level: update drag ──
+    const onMouseMove = (e: MouseEvent) => {
+      mousePosRef.current = { x: e.clientX, y: e.clientY };
+
+      if (!isDragging.current) return;
+
+      // preventDefault on document mousemove blocks browser gesture recognition
+      e.preventDefault();
+
+      if (isRightDrag.current) {
+        const dx = e.clientX - lastMouse.current.x;
+        const dy = e.clientY - lastMouse.current.y;
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+          hasDragged.current = true;
+        }
+        const sensitivity = 0.2;
+        setCameraRotation(prev => {
+          let newYaw = prev.yaw + dx * sensitivity;
+          let newPitch = prev.pitch - dy * sensitivity;
+          if (newPitch > 89.0) newPitch = 89.0;
+          if (newPitch < -89.0) newPitch = -89.0;
+          return { yaw: newYaw, pitch: newPitch };
+        });
+        lastMouse.current = { x: e.clientX, y: e.clientY };
+      } else if (isBoxSelecting.current) {
+        hasDragged.current = true;
+        lastMouse.current = { x: e.clientX, y: e.clientY };
+      } else {
+        const dx = e.clientX - lastMouse.current.x;
+        const dy = e.clientY - lastMouse.current.y;
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+          hasDragged.current = true;
+        }
+      }
+    };
+
+    // ── document-level: end drag ──
+    const onMouseUp = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+
+      if (isBoxSelecting.current) {
+        isBoxSelecting.current = false;
+        onBoxSelectEndRef.current?.();
+      } else if (!hasDragged.current && e.button === 0) {
+        const hovered = lastHoveredBlockRef.current;
+        if (hovered) {
+          const off = minOffsetRef.current;
+          const gx = hovered.x + off.x;
+          const gy = hovered.y + off.y;
+          const gz = hovered.z + off.z;
+
+          const [cx, cy, cz] = getChunkPos(hovered.x, hovered.y, hovered.z);
+          dirtyChunksRef.current.add(`${cx},${cy},${cz}`);
+
+          if (interactionModeRef.current === 'selection') {
+            onSelectionClickRef.current?.(gx, gy, gz, e.ctrlKey || e.metaKey, e.altKey);
+          } else if (interactionModeRef.current === 'editing') {
+            onEditClickRef.current?.(gx, gy, gz);
+          }
+        }
+      }
+      isDragging.current = false;
+      isRightDrag.current = false;
+
+      // Remove document-level listeners (passive mode when not dragging)
+      doc.removeEventListener('mousemove', onMouseMove);
+      doc.removeEventListener('mouseup', onMouseUp);
+    };
+
+    // ── canvas-level: suppress context menu on canvas ──
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    // ── document-level: prevent text selection during drag ──
+    const onSelectStart = (e: Event) => {
+      if (isDragging.current) {
+        e.preventDefault();
+      }
+    };
+
+    canvas.addEventListener('mousedown', onMouseDown);
+    canvas.addEventListener('contextmenu', onContextMenu);
+    doc.addEventListener('selectstart', onSelectStart);
+
+    return () => {
+      canvas.removeEventListener('mousedown', onMouseDown);
+      canvas.removeEventListener('contextmenu', onContextMenu);
+      doc.removeEventListener('selectstart', onSelectStart);
+      doc.removeEventListener('mousemove', onMouseMove);
+      doc.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
 
   // Box selection: update endpoint via raycast in animation loop
   // We store the latest raycast result for box select updates
@@ -677,12 +711,8 @@ export default function DeepslateViewer({
       {loading && <div style={{position:'absolute', top: 20, left: 20, color: 'white'}}>Loading Resources...</div>}
       <canvas
         ref={canvasRef}
-        style={{ width: '100%', height: '100%', display: 'block' }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onContextMenu={handleContextMenu}
+        style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
+        onMouseMove={onRaycastMouseMove}
       />
       <div className="viewport-overlay-hint" style={{position: 'absolute', bottom: 10, left: 10, color: '#aaa', fontSize: '0.8rem'}}>
         {isSelection && 'Selection: Left Click | Add: Ctrl+Click | Sub: Alt+Click | Camera: Right Drag'}

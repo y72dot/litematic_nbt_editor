@@ -74,6 +74,41 @@ html, body, #root {
   margin: 0 5px;
 }
 
+/* Edge Gesture Warning Banner */
+.edge-warning-banner {
+  flex: 0 0 auto;
+  background: #3d2a00;
+  border-bottom: 1px solid #8a6a30;
+  color: #daa520;
+  font-size: 12px;
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.edge-warning-banner code {
+  background: rgba(255,255,255,0.1);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  user-select: all;
+  cursor: text;
+}
+.edge-warning-banner button {
+  flex: 0 0 auto;
+  background: #5a3a1a;
+  border: 1px solid #8a6a30;
+  color: #daa520;
+  padding: 3px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.edge-warning-banner button:hover {
+  background: #6a4a2a;
+}
+
 /* Main Workspace */
 .workspace {
   flex: 1;
