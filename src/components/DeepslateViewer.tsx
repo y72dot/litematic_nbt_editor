@@ -533,6 +533,13 @@ export default function DeepslateViewer({
   const isBoxSelecting = useRef(false);
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Prevent ALL default browser actions on the canvas:
+    // - Right-click context menu / gesture navigation
+    // - Text selection on drag
+    // - Middle-click auto-scroll
+    // - Drag-and-drop
+    e.preventDefault();
+
     isDragging.current = true;
     hasDragged.current = false;
     isRightDrag.current = e.button === 2;
@@ -662,9 +669,10 @@ export default function DeepslateViewer({
 
   return (
     <div
-      style={{ width: '100%', height: '100%', background: '#333', position: 'relative' }}
+      style={{ width: '100%', height: '100%', background: '#333', position: 'relative', userSelect: 'none', touchAction: 'none' } as React.CSSProperties}
       onMouseEnter={() => { isHovered.current = true; }}
       onMouseLeave={() => { isHovered.current = false; pressedKeys.current.clear(); onRaycastMouseLeave(); }}
+      onDragStart={(e) => e.preventDefault()}
     >
       {loading && <div style={{position:'absolute', top: 20, left: 20, color: 'white'}}>Loading Resources...</div>}
       <canvas
