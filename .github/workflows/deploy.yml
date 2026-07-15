@@ -20,14 +20,12 @@ jobs:
 
       - run: npx vite build
 
-      - name: Deploy via rsync
+      - name: Deploy to Server
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          rsync -e "ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key" \
+          sudo apt-get install -y sshpass
+          rsync -e "sshpass -p '${{ secrets.SSH_PASSWORD }}' ssh -o StrictHostKeyChecking=no" \
             -rltgoDzvO --delete \
             dist/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/nbt-editor/releases/${{ github.run_id }}/
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key \
+          sshpass -p '${{ secrets.SSH_PASSWORD }}' ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
             "ln -sfn /var/www/nbt-editor/releases/${{ github.run_id }} /var/www/nbt-editor/current && ls -dt /var/www/nbt-editor/releases/*/ | tail -n +6 | xargs -r rm -rf && sudo systemctl reload nginx"
