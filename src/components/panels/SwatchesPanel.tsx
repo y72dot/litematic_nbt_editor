@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Schematic } from '../../core/Schematic'
 
 interface SwatchesPanelProps {
@@ -14,6 +15,7 @@ export default function SwatchesPanel({
   litematicObj, onUpdate, getBlockColor, selectedBlocks,
   activeBlockType, onActiveBlockChange,
 }: SwatchesPanelProps) {
+  const { t } = useTranslation()
   const [search, setSearch] = useState('')
   const [editingBlock, setEditingBlock] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -62,7 +64,7 @@ export default function SwatchesPanel({
   if (!litematicObj) {
     return (
       <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontSize: '12px' }}>
-        No file loaded
+        {t('swatchesPanel.noFileLoaded')}
       </div>
     )
   }
@@ -73,7 +75,7 @@ export default function SwatchesPanel({
       {/* Search */}
       <input
         className="studio-input"
-        placeholder="Search blocks..."
+        placeholder={t('swatchesPanel.searchPlaceholder')}
         value={search}
         onChange={e => setSearch(e.target.value)}
       />
@@ -88,7 +90,7 @@ export default function SwatchesPanel({
             <div
               key={blockName}
               className={`swatch-chip ${isActive ? 'active' : ''} ${hasSelection ? 'has-replace' : ''}`}
-              title={`${blockName}${hasSelection ? '\nClick to set as active block' : '\nClick to set active | Double-click to rename'}`}
+              title={hasSelection ? t('swatchesPanel.tooltipHasSelection', { name: blockName }) : t('swatchesPanel.tooltipNoSelection', { name: blockName })}
             >
               {isEditing ? (
                 <input
@@ -118,7 +120,7 @@ export default function SwatchesPanel({
                     {shortName(blockName)}
                   </div>
                   {hasSelection && (
-                    <div className="swatch-replace-badge" title="Active block for editing">
+                    <div className="swatch-replace-badge" title={t('swatchesPanel.activeBlockBadge')}>
                       A
                     </div>
                   )}
@@ -131,15 +133,15 @@ export default function SwatchesPanel({
 
       {filteredBlocks.length === 0 && (
         <div style={{ fontSize: '11px', color: '#666', padding: '10px', textAlign: 'center' }}>
-          No blocks match "{search}"
+          {t('swatchesPanel.noBlocksMatch', { search })}
         </div>
       )}
 
       {/* Footer hint */}
       <div className="swatch-footer">
         {hasSelection
-          ? 'Click to set active block for editing'
-          : 'Double-click to rename | Click to set active block'}
+          ? t('swatchesPanel.footerHasSelection')
+          : t('swatchesPanel.footerNoSelection')}
       </div>
     </div>
   )

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import './StatusBar.css';
 
 interface StatusBarProps {
@@ -25,19 +26,20 @@ interface StatusBarProps {
 }
 
 export default function StatusBar(props: StatusBarProps) {
+  const { t } = useTranslation()
   return (
     <div className="status-bar">
-      
+
       {/* Left: Status & Errors */}
       <div className="status-left">
         {props.undoLabel && (
-          <div className="status-item" style={{ opacity: 0.7 }} title={`Undo: ${props.undoLabel}`}>
-            <span className="status-text" style={{ color: '#aaa' }}>Ctrl+Z: {props.undoLabel}</span>
+          <div className="status-item" style={{ opacity: 0.7 }} title={t('statusBar.undoPrefix', { label: props.undoLabel })}>
+            <span className="status-text" style={{ color: '#aaa' }}>{t('statusBar.undoPrefix', { label: props.undoLabel })}</span>
           </div>
         )}
         {props.redoLabel && (
-          <div className="status-item" style={{ opacity: 0.7 }} title={`Redo: ${props.redoLabel}`}>
-            <span className="status-text" style={{ color: '#aaa' }}>Ctrl+Y: {props.redoLabel}</span>
+          <div className="status-item" style={{ opacity: 0.7 }} title={t('statusBar.redoPrefix', { label: props.redoLabel })}>
+            <span className="status-text" style={{ color: '#aaa' }}>{t('statusBar.redoPrefix', { label: props.redoLabel })}</span>
           </div>
         )}
         {props.highlightedBlock ? (
@@ -56,12 +58,12 @@ export default function StatusBar(props: StatusBarProps) {
         ) : props.loading ? (
           <div className="status-item status-loading">
              <span className="status-icon">⏳</span>
-             <span className="status-text">Processing...</span>
+             <span className="status-text">{t('common.processing')}</span>
           </div>
         ) : (
           <div className="status-item">
              <span className="status-icon">ℹ️</span>
-             <span className="status-text">{props.statusMessage || "Ready"}</span>
+             <span className="status-text">{props.statusMessage || t('common.ready')}</span>
           </div>
         )}
       </div>
@@ -72,9 +74,9 @@ export default function StatusBar(props: StatusBarProps) {
             <div className="status-item">
                <span className="status-icon">📐</span>
                <span className="status-text">
-                  {props.size && typeof props.size === 'object' 
-                     ? `${props.size.x} × ${props.size.y} × ${props.size.z}` 
-                     : props.size || 'Unknown Size'}
+                  {props.size && typeof props.size === 'object'
+                     ? `${props.size.x} × ${props.size.y} × ${props.size.z}`
+                     : props.size || t('common.unknownSize')}
                </span>
             </div>
             
@@ -82,7 +84,7 @@ export default function StatusBar(props: StatusBarProps) {
             
             <div className="status-item">
                <span className="status-icon">📦</span>
-               <span className="status-text">{props.regions} Region{props.regions !== 1 ? 's' : ''}</span>
+               <span className="status-text">{t('statusBar.regionCount', { count: props.regions })}</span>
             </div>
          </div>
       )}
@@ -93,15 +95,15 @@ export default function StatusBar(props: StatusBarProps) {
            <>
               <div className="status-item">
                  <span className="status-text" title="Block Unpacking Method">
-                    Format: {props.unpackingMethod === 'spanning' ? '1.13-1.15' : '1.16+'}
+                    {t('statusBar.format', { version: props.unpackingMethod === 'spanning' ? '1.13-1.15' : '1.16+' })}
                  </span>
               </div>
-              
+
               <div className="status-separator"></div>
 
               <div className="status-item">
                  <span className="status-text" title="Rendering Engine">
-                    {props.useDeepslate ? 'Deepslate' : 'Three.js'}
+                    {props.useDeepslate ? t('statusBar.engineDeepslate') : t('statusBar.engineThreeJs')}
                  </span>
               </div>
               

@@ -1,3 +1,5 @@
+import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { InteractionMode, SelectionMode, SelectionModifier } from '../../types'
 
 interface SelectionPanelProps {
@@ -15,18 +17,6 @@ interface SelectionPanelProps {
   onInvertSelection: () => void
 }
 
-const SELECTION_TOOLS: { id: SelectionMode; label: string; icon: string; hint: string }[] = [
-  { id: 'point', label: 'Point', icon: '\u229F', hint: 'Click to select a single block' },
-  { id: 'box', label: 'Box', icon: '\u25A6', hint: 'Drag to box-select blocks' },
-  { id: 'similar', label: 'Similar', icon: '\u2630', hint: 'Select all blocks of the same type' },
-]
-
-const MODIFIERS: { id: SelectionModifier; label: string; hint: string }[] = [
-  { id: 'replace', label: 'Replace', hint: 'Replace current selection' },
-  { id: 'add', label: 'Add', hint: 'Add to current selection' },
-  { id: 'subtract', label: 'Subtract', hint: 'Remove from current selection' },
-]
-
 export default function SelectionPanel({
   interactionMode, onInteractionModeChange,
   selectionMode, onSelectionModeChange,
@@ -35,7 +25,20 @@ export default function SelectionPanel({
   onSelectAll, onDeselectAll,
   onSelectSimilar, onInvertSelection,
 }: SelectionPanelProps) {
+  const { t } = useTranslation()
   const hasSelection = selectionCount > 0
+
+  const selectionTools = useMemo(() => [
+    { id: 'point' as SelectionMode, label: t('selectionPanel.toolPoint'), icon: '\u229F', hint: t('selectionPanel.hintPoint') },
+    { id: 'box' as SelectionMode, label: t('selectionPanel.toolBox'), icon: '\u25A6', hint: t('selectionPanel.hintBox') },
+    { id: 'similar' as SelectionMode, label: t('selectionPanel.toolSimilar'), icon: '\u2630', hint: t('selectionPanel.hintSimilar') },
+  ], [t])
+
+  const modifiers = useMemo(() => [
+    { id: 'replace' as SelectionModifier, label: t('selectionPanel.modifierReplace'), hint: t('selectionPanel.hintReplace') },
+    { id: 'add' as SelectionModifier, label: t('selectionPanel.modifierAdd'), hint: t('selectionPanel.hintAdd') },
+    { id: 'subtract' as SelectionModifier, label: t('selectionPanel.modifierSubtract'), hint: t('selectionPanel.hintSubtract') },
+  ], [t])
 
   const bboxStr = boundingBox
     ? `${boundingBox.maxX - boundingBox.minX + 1}\u00D7${boundingBox.maxY - boundingBox.minY + 1}\u00D7${boundingBox.maxZ - boundingBox.minZ + 1}`
@@ -46,28 +49,28 @@ export default function SelectionPanel({
 
       {/* Mode Toggle */}
       <div>
-        <div className="studio-label" style={{ marginBottom: '4px' }}>MODE</div>
+        <div className="studio-label" style={{ marginBottom: '4px' }}>{t('selectionPanel.sectionMode')}</div>
         <div className="mode-toggle-row">
           <button
             className={`mode-toggle-btn ${interactionMode === 'selection' ? 'active' : ''}`}
             onClick={() => onInteractionModeChange('selection')}
           >
-            Selection
+            {t('selectionPanel.modeSelection')}
           </button>
           <button
             className={`mode-toggle-btn ${interactionMode === 'editing' ? 'active' : ''}`}
             onClick={() => onInteractionModeChange('editing')}
           >
-            Editing
+            {t('selectionPanel.modeEditing')}
           </button>
         </div>
       </div>
 
       {/* Selection Tools */}
       <div>
-        <div className="studio-label" style={{ marginBottom: '4px' }}>SELECTION TOOLS</div>
+        <div className="studio-label" style={{ marginBottom: '4px' }}>{t('selectionPanel.sectionSelectionTools')}</div>
         <div className="tool-grid tool-grid-3">
-          {SELECTION_TOOLS.map(t => (
+          {selectionTools.map(t => (
             <button
               key={t.id}
               className={`tool-btn ${selectionMode === t.id ? 'active' : ''}`}
@@ -83,9 +86,9 @@ export default function SelectionPanel({
 
       {/* Modifier */}
       <div>
-        <div className="studio-label" style={{ marginBottom: '4px' }}>MODIFIER</div>
+        <div className="studio-label" style={{ marginBottom: '4px' }}>{t('selectionPanel.sectionModifier')}</div>
         <div className="tool-grid tool-grid-3">
-          {MODIFIERS.map(m => (
+          {modifiers.map(m => (
             <button
               key={m.id}
               className={`tool-btn modifier-btn ${selectionModifier === m.id ? 'active' : ''}`}
@@ -96,28 +99,28 @@ export default function SelectionPanel({
             </button>
           ))}
         </div>
-        <div className="keyboard-hint">Ctrl+Click = Add | Alt+Click = Subtract</div>
+        <div className="keyboard-hint">{t('selectionPanel.keyboardHint')}</div>
       </div>
 
       {/* Selection Count + BBox */}
       <div className={`selection-count ${hasSelection ? 'has-selection' : ''}`}>
         <div>
           {hasSelection
-            ? `\u25CF ${selectionCount} block${selectionCount !== 1 ? 's' : ''} selected`
-            : '\u25CB No blocks selected'}
+            ? t('selectionPanel.selectedCount', { count: selectionCount })
+            : t('selectionPanel.noBlocksSelected')}
         </div>
         {bboxStr && (
-          <div className="selection-bbox">BBox: {bboxStr}</div>
+          <div className="selection-bbox">{t('selectionPanel.bbox', { size: bboxStr })}</div>
         )}
       </div>
 
       {/* Action Buttons */}
       <div style={{ display: 'flex', gap: '4px' }}>
         <button className="studio-btn" onClick={onSelectAll}>
-          Select All
+          {t('selectionPanel.selectAll')}
         </button>
         <button className="studio-btn" onClick={onDeselectAll} disabled={!hasSelection}>
-          Deselect
+          {t('selectionPanel.deselect')}
         </button>
       </div>
 
@@ -126,24 +129,24 @@ export default function SelectionPanel({
           className="studio-btn"
           onClick={onSelectSimilar}
           disabled={!hasSelection}
-          title="Select all blocks of the same types within the selection"
+          title={t('selectionPanel.hintSelectSimilar')}
         >
-          Select Similar
+          {t('selectionPanel.selectSimilar')}
         </button>
         <button
           className="studio-btn"
           onClick={onInvertSelection}
-          title="Invert current selection"
+          title={t('selectionPanel.hintInvert')}
         >
-          Invert
+          {t('selectionPanel.invert')}
         </button>
       </div>
 
       {/* Mode hint */}
       <div className="selection-mode-hint">
         {interactionMode === 'selection'
-          ? 'Select blocks, then switch to Editing mode to modify them.'
-          : 'Selection restricts editing. Switch to Selection mode to change selection.'}
+          ? t('selectionPanel.modeHintSelection')
+          : t('selectionPanel.modeHintEditing')}
       </div>
     </div>
   )

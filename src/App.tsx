@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useTranslation, Trans } from 'react-i18next'
 import * as nbt from 'prismarine-nbt'
 import pako from 'pako'
 import './App.css'
@@ -7,6 +8,7 @@ import 'flexlayout-react/style/dark.css' // Import FlexLayout dark theme
 import { Buffer } from 'buffer'
 import { Layout, Model, Actions, DockLocation } from 'flexlayout-react'
 import type { TabNode, IJsonModel } from 'flexlayout-react'
+import i18n from './i18n'
 
 import { getBlockColor } from './LitematicViewer'
 import MenuBar from './components/MenuBar'
@@ -38,93 +40,95 @@ if (typeof window !== 'undefined' && !window.Buffer) {
 }
 
 // --- Default Layout Configuration ---
-const defaultLayout: IJsonModel = {
-  global: {
-    tabEnableClose: true,
-    tabEnableRename: false,
-    tabSetEnableMaximize: true,
-  },
-  borders: [],
-  layout: {
-    type: 'row',
-    id: 'root',
-    weight: 100,
-    children: [
-      {
-        type: 'tabset',
-        weight: 70,
-        selected: 0,
-        children: [
-          {
-            type: 'tab',
-            name: '3D Viewer',
-            component: 'viewer',
-            enableClose: false,
-          }
-        ]
-      },
-      {
-        type: 'column',
-        weight: 30,
-        children: [
-          {
-            type: 'tabset',
-            weight: 38,
-            children: [
-              {
-                type: 'tab',
-                name: 'Tools',
-                component: 'tools'
-              },
-              {
-                type: 'tab',
-                name: 'Selection',
-                component: 'selection'
-              }
-            ]
-          },
-          {
-            type: 'tabset',
-            weight: 32,
-            children: [
-              {
-                type: 'tab',
-                name: 'Swatches',
-                component: 'swatches'
-              },
-              {
-                type: 'tab',
-                name: 'History',
-                component: 'history'
-              }
-            ]
-          },
-          {
-            type: 'tabset',
-            weight: 30,
-            children: [
-              {
-                type: 'tab',
-                name: 'Metadata',
-                component: 'metadata'
-              },
-              {
-                type: 'tab',
-                name: 'Settings',
-                component: 'settings'
-              },
-              {
-                type: 'tab',
-                name: 'Raw NBT',
-                component: 'nbt'
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
-};
+function buildDefaultLayout(t: (key: string) => string): IJsonModel {
+  return {
+    global: {
+      tabEnableClose: true,
+      tabEnableRename: false,
+      tabSetEnableMaximize: true,
+    },
+    borders: [],
+    layout: {
+      type: 'row',
+      id: 'root',
+      weight: 100,
+      children: [
+        {
+          type: 'tabset',
+          weight: 70,
+          selected: 0,
+          children: [
+            {
+              type: 'tab',
+              name: t('tabs.viewer3d'),
+              component: 'viewer',
+              enableClose: false,
+            }
+          ]
+        },
+        {
+          type: 'column',
+          weight: 30,
+          children: [
+            {
+              type: 'tabset',
+              weight: 38,
+              children: [
+                {
+                  type: 'tab',
+                  name: t('tabs.tools'),
+                  component: 'tools'
+                },
+                {
+                  type: 'tab',
+                  name: t('tabs.selection'),
+                  component: 'selection'
+                }
+              ]
+            },
+            {
+              type: 'tabset',
+              weight: 32,
+              children: [
+                {
+                  type: 'tab',
+                  name: t('tabs.swatches'),
+                  component: 'swatches'
+                },
+                {
+                  type: 'tab',
+                  name: t('tabs.history'),
+                  component: 'history'
+                }
+              ]
+            },
+            {
+              type: 'tabset',
+              weight: 30,
+              children: [
+                {
+                  type: 'tab',
+                  name: t('tabs.metadata'),
+                  component: 'metadata'
+                },
+                {
+                  type: 'tab',
+                  name: t('tabs.settings'),
+                  component: 'settings'
+                },
+                {
+                  type: 'tab',
+                  name: t('tabs.rawNbt'),
+                  component: 'nbt'
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  };
+}
 
 /**
  * Count how many unpacked block indices fall outside the palette range.
@@ -154,7 +158,8 @@ const EMPTY_BOX_SELECTION: BoxSelectionState = {
 };
 
 function App() {
-  const [model] = useState(() => Model.fromJson(defaultLayout));
+  const { t } = useTranslation()
+  const [model] = useState(() => Model.fromJson(buildDefaultLayout(t)));
 
   // App State
   const [metadata, setMetadata] = useState<LitematicMetadata | null>(null)
@@ -568,7 +573,7 @@ function App() {
 
     } catch (err: any) {
       console.error(err)
-      setError(`Failed to parse file: ${err.message}`)
+      setError(t('app.errorParseFile', { message: err.message }))
     } finally {
       setLoading(false)
     }
@@ -656,7 +661,7 @@ function App() {
 
     } catch (err: any) {
       console.error('Save failed:', err)
-      setError(`Failed to save file: ${err.message}`)
+      setError(t('app.errorSaveFile', { message: err.message }))
     }
   }
 
@@ -920,14 +925,14 @@ function App() {
       {/* 1. Top Bar */}
       <div className="top-bar" style={{padding: 0}}>
         <div style={{padding: '0 15px', display: 'flex', alignItems: 'center', borderRight: '1px solid #111', height: '100%'}}>
-           <span className="top-bar-title" style={{margin: 0}}>Litematic Studio</span>
+           <span className="top-bar-title" style={{margin: 0}}>{t('app.title')}</span>
         </div>
 
         <MenuBar
            onOpenFile={handleFileUpload}
            onSaveFile={handleSave}
            onReset={() => { setLitematicObj(null); setMetadata(null); setFileName('edited.litematic'); }}
-           onAbout={() => alert('Litematic Studio v1.0\nBy CYQ\nPowered by Deepslate & React')}
+           onAbout={() => alert(t('app.about'))}
 
            useDeepslate={useDeepslate}
            setUseDeepslate={setUseDeepslate}
@@ -942,18 +947,30 @@ function App() {
            hasFile={!!litematicObj}
         />
 
-        {loading && <span style={{marginLeft: 'auto', marginRight: '15px', fontSize: '12px', color: '#aaa'}}>Processing...</span>}
+        {loading && <span style={{marginLeft: 'auto', marginRight: '15px', fontSize: '12px', color: '#aaa'}}>{t('common.processing')}</span>}
         {!loading && fileName && <span style={{marginLeft: 'auto', marginRight: '15px', fontSize: '12px', color: '#888'}}>{fileName}</span>}
+        <select
+          value={i18n.language}
+          onChange={(e) => i18n.changeLanguage(e.target.value)}
+          style={{ background: '#1f1f1f', color: '#ccc', border: '1px solid #444',
+                   borderRadius: '3px', padding: '2px 6px', fontSize: '11px', cursor: 'pointer', marginRight: '10px' }}
+        >
+          <option value="en">EN</option>
+          <option value="zh-CN">中文</option>
+        </select>
       </div>
 
       {/* 1.5 Edge Mouse Gesture Warning */}
       {isEdge && !edgeWarningDismissed && (
         <div className="edge-warning-banner">
           <span>
-            <strong>Microsoft Edge</strong>: Right-drag may trigger browser mouse gesture navigation.
-            Paste <code>edge://settings/appearance/browserBehavior/mouseGestures</code> in address bar to disable it.
+            <Trans
+              i18nKey="app.edgeWarning"
+              values={{ url: 'edge://settings/appearance/browserBehavior/mouseGestures' }}
+              components={{ strong: <strong />, code: <code /> }}
+            />
           </span>
-          <button onClick={() => setEdgeWarningDismissed(true)}>Dismiss</button>
+          <button onClick={() => setEdgeWarningDismissed(true)}>{t('app.edgeDismiss')}</button>
         </div>
       )}
 
@@ -971,7 +988,7 @@ function App() {
         <StatusBar
            loading={loading}
            error={error}
-           statusMessage={litematicObj ? "Ready. Use WASD to move, Drag to rotate." : "Waiting for file..."}
+           statusMessage={litematicObj ? t('app.statusReady') : t('app.statusWaiting')}
 
            hasFile={!!litematicObj}
            regions={metadata?.regions || 0}

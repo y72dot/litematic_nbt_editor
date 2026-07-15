@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { TraversalOrder } from '../../core/BlockStorage';
 
 interface SettingsPanelProps {
@@ -17,45 +18,46 @@ export default function SettingsPanel({
   useDeepslate,
   setUseDeepslate
 }: SettingsPanelProps) {
-  
+  const { t } = useTranslation()
+
   return (
     <div className="panel-section-body" style={{ height: '100%', overflowY: 'auto' }}>
-       <label className="studio-label">Renderer</label>
-       <select 
+       <label className="studio-label">{t('settingsPanel.labelRenderer')}</label>
+       <select
           className="studio-select"
-          value={useDeepslate ? 'deepslate' : 'three'} 
+          value={useDeepslate ? 'deepslate' : 'three'}
           onChange={(e) => setUseDeepslate(e.target.value === 'deepslate')}
        >
-          <option value="deepslate">Deepslate (High Quality)</option>
-          <option value="three">Three.js (Simple)</option>
+          <option value="deepslate">{t('settingsPanel.optionDeepslate')}</option>
+          <option value="three">{t('settingsPanel.optionThreeJs')}</option>
        </select>
-       
-       <label className="studio-label" style={{marginTop: '10px'}}>Block Unpacking Format</label>
-       <select 
+
+       <label className="studio-label" style={{marginTop: '10px'}}>{t('settingsPanel.labelUnpacking')}</label>
+       <select
           className="studio-select"
-          value={unpackingMethod} 
+          value={unpackingMethod}
           onChange={(e) => setUnpackingMethod(e.target.value as any)}
        >
-          <option value="non-spanning">1.16+ (Non-Spanning)</option>
-          <option value="spanning">1.13-1.15 (Spanning)</option>
+          <option value="non-spanning">{t('settingsPanel.optionNonSpanning')}</option>
+          <option value="spanning">{t('settingsPanel.optionSpanning')}</option>
        </select>
-       
-       <label className="studio-label" style={{marginTop: '10px'}}>Traversal Order</label>
-       <select 
+
+       <label className="studio-label" style={{marginTop: '10px'}}>{t('settingsPanel.labelTraversal')}</label>
+       <select
           className="studio-select"
-          value={traversalOrder} 
+          value={traversalOrder}
           onChange={(e) => setTraversalOrder(e.target.value as any)}
        >
-          <option value="YZX">YZX (Standard)</option>
+          <option value="YZX">{t('settingsPanel.optionYzx')}</option>
           <option value="XYZ">XYZ</option>
           <option value="YXZ">YXZ</option>
           <option value="XZY">XZY</option>
           <option value="ZXY">ZXY</option>
           <option value="ZYX">ZYX</option>
        </select>
-       
+
        <div style={{marginTop: '20px', fontSize: '11px', color: '#666'}}>
-         Note: Unpacking format is usually auto-detected from Litematic version.
+         {t('settingsPanel.note')}
        </div>
     </div>
   );

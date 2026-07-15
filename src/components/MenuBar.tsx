@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import './MenuBar.css';
 
 interface MenuBarProps {
@@ -23,6 +24,7 @@ interface MenuBarProps {
 }
 
 export default function MenuBar(props: MenuBarProps) {
+  const { t } = useTranslation()
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,44 +74,39 @@ export default function MenuBar(props: MenuBarProps) {
       
       {/* File Menu */}
       <div className={`menu-item ${activeMenu === 'file' ? 'active' : ''}`} onClick={() => handleMenuClick('file')}>
-        <span>File</span>
+        <span>{t('menu.file')}</span>
         {activeMenu === 'file' && (
           <div className="dropdown-menu">
             <div className="dropdown-item" onClick={() => { fileInputRef.current?.click(); setActiveMenu(null); }}>
               <span className="dropdown-icon">📂</span>
-              <span>Open...</span>
-              <span className="dropdown-shortcut">Ctrl+O</span>
+              <span>{t('menu.open')}</span>
+              <span className="dropdown-shortcut">{t('menu.shortcutCtrlO')}</span>
             </div>
-            
+
             <div className={`dropdown-item ${!props.hasFile ? 'disabled' : ''}`} onClick={() => props.hasFile && handleItemClick(() => props.onSaveFile())}>
               <span className="dropdown-icon">💾</span>
-              <span>Save</span>
-              <span className="dropdown-shortcut">Ctrl+S</span>
+              <span>{t('menu.save')}</span>
+              <span className="dropdown-shortcut">{t('menu.shortcutCtrlS')}</span>
             </div>
 
             <div className="dropdown-separator"></div>
 
             <div className={`dropdown-item ${!props.hasFile ? 'disabled' : ''}`} style={{position: 'relative'}}>
                <span className="dropdown-icon">📤</span>
-               <span>Export As...</span>
+               <span>{t('menu.exportAs')}</span>
                <span className="dropdown-arrow">▶</span>
-               
-               {/* Submenu on hover (handled by CSS usually, but for click menu we might need logic) */}
-               {/* Since this is a simple react implementation, let's just show nested items or make it expand */}
-               {/* A simpler approach for this UI style is to just list the options directly with indentation or separator */}
             </div>
-            {/* Expanded export options for simplicity in this specific UI implementation */}
             <div className={`dropdown-item ${!props.hasFile ? 'disabled' : ''}`} style={{paddingLeft: '35px'}} onClick={() => props.hasFile && handleItemClick(() => props.onSaveFile('litematic'))}>
-              <span>.litematic</span>
+              <span>{t('menu.exportLitematic')}</span>
             </div>
             <div className={`dropdown-item ${!props.hasFile ? 'disabled' : ''}`} style={{paddingLeft: '35px'}} onClick={() => props.hasFile && handleItemClick(() => props.onSaveFile('nbt'))}>
-              <span>.nbt (Structure)</span>
+              <span>{t('menu.exportNbt')}</span>
             </div>
 
             <div className="dropdown-separator"></div>
             <div className="dropdown-item" onClick={() => handleItemClick(props.onReset)}>
               <span className="dropdown-icon">🔄</span>
-              <span>Reset</span>
+              <span>{t('menu.reset')}</span>
             </div>
           </div>
         )}
@@ -117,34 +114,34 @@ export default function MenuBar(props: MenuBarProps) {
 
       {/* Render Menu */}
       <div className={`menu-item ${activeMenu === 'render' ? 'active' : ''}`} onClick={() => handleMenuClick('render')}>
-        <span>Render</span>
+        <span>{t('menu.render')}</span>
         {activeMenu === 'render' && (
           <div className="dropdown-menu">
-            <div className="dropdown-header" style={{padding: '4px 15px', fontSize: '11px', color: '#888'}}>ENGINE</div>
+            <div className="dropdown-header" style={{padding: '4px 15px', fontSize: '11px', color: '#888'}}>{t('menu.sectionEngine')}</div>
             <div className="dropdown-item" onClick={() => handleItemClick(() => props.setUseDeepslate(true))}>
               <span className="dropdown-icon">{props.useDeepslate ? '✓' : ''}</span>
-              <span>Deepslate (High Quality)</span>
+              <span>{t('menu.engineDeepslate')}</span>
             </div>
             <div className="dropdown-item" onClick={() => handleItemClick(() => props.setUseDeepslate(false))}>
               <span className="dropdown-icon">{!props.useDeepslate ? '✓' : ''}</span>
-              <span>Three.js (Simple)</span>
-            </div>
-            
-            <div className="dropdown-separator"></div>
-            <div className="dropdown-header" style={{padding: '4px 15px', fontSize: '11px', color: '#888'}}>UNPACKING</div>
-            
-            <div className="dropdown-item" onClick={() => handleItemClick(() => props.setUnpackingMethod('non-spanning'))}>
-              <span className="dropdown-icon">{props.unpackingMethod === 'non-spanning' ? '✓' : ''}</span>
-              <span>1.16+ (Non-Spanning)</span>
-            </div>
-            <div className="dropdown-item" onClick={() => handleItemClick(() => props.setUnpackingMethod('spanning'))}>
-              <span className="dropdown-icon">{props.unpackingMethod === 'spanning' ? '✓' : ''}</span>
-              <span>1.13-1.15 (Spanning)</span>
+              <span>{t('menu.engineThreeJs')}</span>
             </div>
 
             <div className="dropdown-separator"></div>
-            <div className="dropdown-header" style={{padding: '4px 15px', fontSize: '11px', color: '#888'}}>ORDER</div>
-             
+            <div className="dropdown-header" style={{padding: '4px 15px', fontSize: '11px', color: '#888'}}>{t('menu.sectionUnpacking')}</div>
+
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.setUnpackingMethod('non-spanning'))}>
+              <span className="dropdown-icon">{props.unpackingMethod === 'non-spanning' ? '✓' : ''}</span>
+              <span>{t('menu.unpackingNonSpanning')}</span>
+            </div>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.setUnpackingMethod('spanning'))}>
+              <span className="dropdown-icon">{props.unpackingMethod === 'spanning' ? '✓' : ''}</span>
+              <span>{t('menu.unpackingSpanning')}</span>
+            </div>
+
+            <div className="dropdown-separator"></div>
+            <div className="dropdown-header" style={{padding: '4px 15px', fontSize: '11px', color: '#888'}}>{t('menu.sectionOrder')}</div>
+
             {['YZX', 'XYZ', 'YXZ'].map(order => (
                <div key={order} className="dropdown-item" onClick={() => handleItemClick(() => props.setTraversalOrder(order))}>
                  <span className="dropdown-icon">{props.traversalOrder === order ? '✓' : ''}</span>
@@ -157,60 +154,60 @@ export default function MenuBar(props: MenuBarProps) {
 
       {/* Window Menu */}
       <div className={`menu-item ${activeMenu === 'window' ? 'active' : ''}`} onClick={() => handleMenuClick('window')}>
-        <span>Window</span>
+        <span>{t('menu.window')}</span>
         {activeMenu === 'window' && (
           <div className="dropdown-menu">
-            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('tools', 'Tools'))}>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('tools', t('tabs.tools')))}>
               <span className="dropdown-icon">{props.isPanelOpen('tools') ? '✓' : ''}</span>
-              <span>Tools</span>
+              <span>{t('menu.panelTools')}</span>
             </div>
-            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('selection', 'Selection'))}>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('selection', t('tabs.selection')))}>
               <span className="dropdown-icon">{props.isPanelOpen('selection') ? '✓' : ''}</span>
-              <span>Selection</span>
+              <span>{t('menu.panelSelection')}</span>
             </div>
-            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('swatches', 'Swatches'))}>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('swatches', t('tabs.swatches')))}>
               <span className="dropdown-icon">{props.isPanelOpen('swatches') ? '✓' : ''}</span>
-              <span>Swatches</span>
+              <span>{t('menu.panelSwatches')}</span>
             </div>
-            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('history', 'History'))}>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('history', t('tabs.history')))}>
               <span className="dropdown-icon">{props.isPanelOpen('history') ? '✓' : ''}</span>
-              <span>History</span>
+              <span>{t('menu.panelHistory')}</span>
             </div>
-            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('metadata', 'Metadata'))}>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('metadata', t('tabs.metadata')))}>
               <span className="dropdown-icon">{props.isPanelOpen('metadata') ? '✓' : ''}</span>
-              <span>Metadata</span>
+              <span>{t('menu.panelMetadata')}</span>
             </div>
-            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('settings', 'Settings'))}>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('settings', t('tabs.settings')))}>
               <span className="dropdown-icon">{props.isPanelOpen('settings') ? '✓' : ''}</span>
-              <span>Advanced Settings</span>
+              <span>{t('menu.panelSettings')}</span>
             </div>
-            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('nbt', 'Raw NBT'))}>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('nbt', t('tabs.rawNbt')))}>
               <span className="dropdown-icon">{props.isPanelOpen('nbt') ? '✓' : ''}</span>
-              <span>Raw NBT Data</span>
+              <span>{t('menu.panelNbt')}</span>
             </div>
-            
+
             <div className="dropdown-separator"></div>
-            
+
             <div className="dropdown-item disabled">
               <span className="dropdown-icon">{props.isPanelOpen('viewer') ? '✓' : ''}</span>
-              <span>3D Viewer (Always Open)</span>
+              <span>{t('menu.panelViewerAlwaysOpen')}</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* About Menu */}
+      {/* Help Menu */}
       <div className={`menu-item ${activeMenu === 'about' ? 'active' : ''}`} onClick={() => handleMenuClick('about')}>
-        <span>Help</span>
+        <span>{t('menu.help')}</span>
         {activeMenu === 'about' && (
           <div className="dropdown-menu">
             <div className="dropdown-item" onClick={() => handleItemClick(props.onAbout)}>
               <span className="dropdown-icon">ℹ️</span>
-              <span>About</span>
+              <span>{t('menu.aboutItem')}</span>
             </div>
             <div className="dropdown-item" onClick={() => { window.open('https://github.com/misode/deepslate', '_blank'); setActiveMenu(null); }}>
               <span className="dropdown-icon">🔗</span>
-              <span>Deepslate GitHub</span>
+              <span>{t('menu.deepslateGithub')}</span>
             </div>
           </div>
         )}

@@ -1,6 +1,7 @@
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Stats, Grid } from '@react-three/drei'
 import { useMemo, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import * as THREE from 'three'
 import type { Schematic } from './core/Schematic'
 import { isBlockVisible } from './utils/litematicParser' // Reusing visibility check for now
@@ -59,6 +60,7 @@ function SceneSetup({ center }: { center: [number, number, number] }) {
 }
 
 export default function LitematicViewer({ litematic, unpackingMethod, traversalOrder }: LitematicViewerProps) {
+  const { t } = useTranslation()
   // Extract regions and process geometry
   const { instances, center } = useMemo(() => {
     const instances: { color: string, matrix: THREE.Matrix4, id: number }[] = []
@@ -191,7 +193,7 @@ export default function LitematicViewer({ litematic, unpackingMethod, traversalO
       
       {/* Overlay Info */}
       <div style={{ position: 'absolute', bottom: 10, left: 10, color: 'white', background: 'rgba(0,0,0,0.5)', padding: '5px', borderRadius: '4px', fontSize: '0.8em', pointerEvents: 'none' }}>
-        Method: {unpackingMethod} | Order: {traversalOrder}
+        {t('litematicViewer.overlayMethod', { method: unpackingMethod, order: traversalOrder })}
       </div>
     </div>
   )

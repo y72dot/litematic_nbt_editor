@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import LitematicViewer from '../../LitematicViewer';
 import DeepslateViewer from '../DeepslateViewer';
 import type { Schematic } from '../../core/Schematic';
@@ -52,6 +53,7 @@ export default function ViewerPanel({
   onEditClick,
   structureVersion,
 }: ViewerPanelProps) {
+  const { t } = useTranslation()
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: '#111' }}>
@@ -64,10 +66,10 @@ export default function ViewerPanel({
       {!litematicObj && !loading && (
          <div className="empty-state">
            <div style={{fontSize: '48px', marginBottom: '20px'}}>🧊</div>
-           <h3>No Model Loaded</h3>
-           <p>Open a .litematic file to begin editing</p>
+           <h3>{t('viewerPanel.noModelLoaded')}</h3>
+           <p>{t('viewerPanel.openPrompt')}</p>
            <label className="upload-btn-large">
-              Select File
+              {t('viewerPanel.selectFile')}
               <input
                 type="file"
                 accept=".litematic,.nbt,.schematic"

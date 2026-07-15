@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { EditHistory } from '../../core/commands/EditHistory'
 
 interface HistoryPanelProps {
@@ -15,6 +16,7 @@ export default function HistoryPanel({
   editHistoryRef, undoLabel, redoLabel, onHistoryChange,
   historyVersion, onUndo, onRedo,
 }: HistoryPanelProps) {
+  const { t } = useTranslation()
   const entries = useMemo(() => {
     // historyVersion is used to trigger re-computation
     void historyVersion
@@ -52,7 +54,7 @@ export default function HistoryPanel({
           disabled={!editHistoryRef.current.canUndo}
           title={undoLabel ?? undefined}
         >
-          {undoLabel ? `Undo: ${undoLabel}` : 'Undo'}
+          {undoLabel ? t('historyPanel.undoPrefix', { label: undoLabel }) : t('historyPanel.undo')}
         </button>
         <button
           className="studio-btn"
@@ -60,14 +62,14 @@ export default function HistoryPanel({
           disabled={!editHistoryRef.current.canRedo}
           title={redoLabel ?? undefined}
         >
-          {redoLabel ? `Redo: ${redoLabel}` : 'Redo'}
+          {redoLabel ? t('historyPanel.redoPrefix', { label: redoLabel }) : t('historyPanel.redo')}
         </button>
       </div>
 
       {/* History Entry List */}
       <div className="history-list" style={{ flex: 1, overflowY: 'auto' }}>
         {entries.length === 0 && (
-          <div className="history-empty">No history yet</div>
+          <div className="history-empty">{t('historyPanel.noHistory')}</div>
         )}
 
         {entries.map((entry, i) => {
@@ -76,13 +78,13 @@ export default function HistoryPanel({
             <div key={`${entry.index}-${entry.status}`}>
               {isLastDone && doneCount > 0 && undoneCount > 0 && (
                 <div className="history-separator">
-                  <span>current state</span>
+                  <span>{t('historyPanel.currentState')}</span>
                 </div>
               )}
               <div
                 className={`history-entry ${entry.status}`}
                 onClick={() => handleEntryClick(entry)}
-                title="Click to jump to this state"
+                title={t('historyPanel.jumpTooltip')}
               >
                 <span className={`history-dot ${entry.status}`} />
                 <span className="history-label">{entry.label}</span>
@@ -95,9 +97,9 @@ export default function HistoryPanel({
       {/* Footer Stats */}
       {(doneCount > 0 || undoneCount > 0) && (
         <div className="history-footer" style={{ flexShrink: 0 }}>
-          <span>{entries.length} actions</span>
+          <span>{t('historyPanel.footerActions', { count: entries.length })}</span>
           <span className="history-footer-spacer">|</span>
-          <span>{undoneCount} undone</span>
+          <span>{t('historyPanel.footerUndone', { count: undoneCount })}</span>
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Schematic } from '../core/Schematic';
 import { SchematicStructureProvider } from '../core/SchematicStructureProvider';
 import { BlockDefinition, BlockModel, StructureRenderer, TextureAtlas, type Resources, type ItemRendererResources, Identifier } from 'deepslate';
@@ -77,6 +78,7 @@ export default function DeepslateViewer({
   onEditClick,
   structureVersion,
 }: DeepslateViewerProps) {
+  const { t } = useTranslation()
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<StructureRenderer | null>(null);
   const lineRendererRef = useRef<LineRenderer | null>(null);
@@ -492,7 +494,7 @@ export default function DeepslateViewer({
             if (!last || last.x !== hx || last.y !== hy || last.z !== hz) {
               lastHoveredBlockRef.current = { x: hx, y: hy, z: hz, normalX: hit.normal[0], normalY: hit.normal[1], normalZ: hit.normal[2] };
 
-              let name = 'Unknown Block';
+              let name = t('common.unknownBlock');
               if (litematic) {
                 const blockInfo = litematic.getBlock(gx, gy, gz);
                 if (blockInfo) {
@@ -708,16 +710,16 @@ export default function DeepslateViewer({
       onMouseLeave={() => { isHovered.current = false; pressedKeys.current.clear(); onRaycastMouseLeave(); }}
       onDragStart={(e) => e.preventDefault()}
     >
-      {loading && <div style={{position:'absolute', top: 20, left: 20, color: 'white'}}>Loading Resources...</div>}
+      {loading && <div style={{position:'absolute', top: 20, left: 20, color: 'white'}}>{t('deepslateViewer.loadingResources')}</div>}
       <canvas
         ref={canvasRef}
         style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
         onMouseMove={onRaycastMouseMove}
       />
       <div className="viewport-overlay-hint" style={{position: 'absolute', bottom: 10, left: 10, color: '#aaa', fontSize: '0.8rem'}}>
-        {isSelection && 'Selection: Left Click | Add: Ctrl+Click | Sub: Alt+Click | Camera: Right Drag'}
-        {isEditing && 'Editing: Left Click | Camera: Right Drag'}
-        {!isSelection && !isEditing && 'Drag: Rotate | Scroll: Zoom | WASD: Move'}
+        {isSelection && t('deepslateViewer.hintSelection')}
+        {isEditing && t('deepslateViewer.hintEditing')}
+        {!isSelection && !isEditing && t('deepslateViewer.hintDefault')}
       </div>
     </div>
   );

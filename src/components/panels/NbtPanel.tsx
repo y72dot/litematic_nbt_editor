@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { Schematic } from '../../core/Schematic';
 
 interface NbtPanelProps {
@@ -5,10 +6,12 @@ interface NbtPanelProps {
 }
 
 export default function NbtPanel({ litematicObj }: NbtPanelProps) {
+  const { t } = useTranslation()
+
   if (!litematicObj) {
      return (
        <div style={{padding: '20px', textAlign: 'center', color: '#666', fontSize: '12px'}}>
-          No file loaded
+          {t('common.noFileLoaded')}
        </div>
      );
   }

@@ -24,10 +24,12 @@
     "deepslate": "^0.25.1",
     "flexlayout-react": "^0.8.19",
     "gl-matrix": "^3.4.4",
+    "i18next": "^26.3.6",
     "pako": "^2.1.0",
     "prismarine-nbt": "^2.8.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-i18next": "^17.0.9",
     "three": "^0.183.2",
     "vite-plugin-node-polyfills": "^0.25.0"
   },

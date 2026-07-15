@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { InteractionMode, EditMode } from '../../types'
 import type { Schematic } from '../../core/Schematic'
 
@@ -13,22 +14,23 @@ interface ToolPanelProps {
   getBlockColor: (blockId: string) => string
 }
 
-const EDIT_TOOLS: { id: EditMode; label: string; icon: string; hint: string }[] = [
-  { id: 'place', label: 'Place', icon: '\u25A0', hint: 'Place on face (air only)' },
-  { id: 'replace', label: 'Replace', icon: '\u25C6', hint: 'Replace any block' },
-  { id: 'erase', label: 'Erase', icon: '\u2205', hint: 'Erase (set to air)' },
-  { id: 'fill', label: 'Fill', icon: '\u25A6', hint: 'Flood-fill connected area' },
-  { id: 'pick', label: 'Pick', icon: '\u21F1', hint: 'Pick block type from scene' },
-]
-
 export default function ToolPanel({
   interactionMode, onInteractionModeChange,
   editMode, onEditModeChange,
   activeBlockType, onBlockTypeChange,
   litematicObj, getBlockColor,
 }: ToolPanelProps) {
+  const { t } = useTranslation()
   const [blockSearch, setBlockSearch] = useState('')
   const recentRef = useRef<string[]>([])
+
+  const editTools = useMemo(() => [
+    { id: 'place' as EditMode, label: t('toolPanel.toolPlace'), icon: '\u25A0', hint: t('toolPanel.hintPlace') },
+    { id: 'replace' as EditMode, label: t('toolPanel.toolReplace'), icon: '\u25C6', hint: t('toolPanel.hintReplace') },
+    { id: 'erase' as EditMode, label: t('toolPanel.toolErase'), icon: '\u2205', hint: t('toolPanel.hintErase') },
+    { id: 'fill' as EditMode, label: t('toolPanel.toolFill'), icon: '\u25A6', hint: t('toolPanel.hintFill') },
+    { id: 'pick' as EditMode, label: t('toolPanel.toolPick'), icon: '\u21F1', hint: t('toolPanel.hintPick') },
+  ], [t])
 
   // Track recent blocks whenever activeBlockType changes
   if (activeBlockType && recentRef.current[0] !== activeBlockType) {
@@ -60,7 +62,7 @@ export default function ToolPanel({
   if (!litematicObj) {
     return (
       <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontSize: '12px' }}>
-        No file loaded
+        {t('common.noFileLoaded')}
       </div>
     )
   }
@@ -70,28 +72,28 @@ export default function ToolPanel({
 
       {/* Mode Toggle */}
       <div>
-        <div className="studio-label" style={{ marginBottom: '4px' }}>MODE</div>
+        <div className="studio-label" style={{ marginBottom: '4px' }}>{t('toolPanel.sectionMode')}</div>
         <div className="mode-toggle-row">
           <button
             className={`mode-toggle-btn ${interactionMode === 'selection' ? 'active' : ''}`}
             onClick={() => onInteractionModeChange('selection')}
           >
-            Selection
+            {t('toolPanel.modeSelection')}
           </button>
           <button
             className={`mode-toggle-btn ${interactionMode === 'editing' ? 'active' : ''}`}
             onClick={() => onInteractionModeChange('editing')}
           >
-            Editing
+            {t('toolPanel.modeEditing')}
           </button>
         </div>
       </div>
 
       {/* Editing Tools — always visible */}
       <div>
-        <div className="studio-label" style={{ marginBottom: '4px' }}>EDITING TOOLS</div>
+        <div className="studio-label" style={{ marginBottom: '4px' }}>{t('toolPanel.sectionEditingTools')}</div>
         <div className="tool-grid tool-grid-5">
-          {EDIT_TOOLS.map(t => (
+          {editTools.map(t => (
             <button
               key={t.id}
               className={`tool-btn ${editMode === t.id ? 'active' : ''}`}
@@ -107,7 +109,7 @@ export default function ToolPanel({
 
       {/* Active Block — always visible */}
       <div>
-        <div className="studio-label" style={{ marginBottom: '4px' }}>ACTIVE BLOCK</div>
+        <div className="studio-label" style={{ marginBottom: '4px' }}>{t('toolPanel.sectionActiveBlock')}</div>
         <div className="active-block-display">
           <div className="active-block-swatch" style={{ backgroundColor: getBlockColor(activeBlockType) }} />
           <span className="active-block-name">{activeBlockType}</span>
@@ -118,7 +120,7 @@ export default function ToolPanel({
       <input
         className="studio-input"
         style={{ marginBottom: 0 }}
-        placeholder="Quick search..."
+        placeholder={t('toolPanel.searchPlaceholder')}
         value={blockSearch}
         onChange={e => setBlockSearch(e.target.value)}
       />
@@ -138,7 +140,7 @@ export default function ToolPanel({
         ))}
         {filteredBlocks.length === 0 && (
           <div style={{ fontSize: '11px', color: '#666', padding: '4px', textAlign: 'center' }}>
-            No blocks match
+            {t('toolPanel.noBlocksMatch')}
           </div>
         )}
       </div>
@@ -146,14 +148,14 @@ export default function ToolPanel({
       {/* Recent Blocks */}
       {recentRef.current.length > 1 && (
         <div>
-          <div className="studio-label" style={{ marginBottom: '4px' }}>RECENT</div>
+          <div className="studio-label" style={{ marginBottom: '4px' }}>{t('toolPanel.sectionRecent')}</div>
           <div className="recent-grid">
             {recentRef.current.slice(0, 6).map(name => (
               <div
                 key={name}
                 className={`recent-swatch ${name === activeBlockType ? 'active' : ''}`}
                 style={{ backgroundColor: getBlockColor(name) }}
-                title={`${name}\nClick to select | Right-click to set active`}
+                title={t('toolPanel.recentTooltip', { name })}
                 onClick={() => onBlockTypeChange(name)}
                 onContextMenu={(e) => handleRecentRightClick(name, e)}
               />
