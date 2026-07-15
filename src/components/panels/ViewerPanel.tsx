@@ -2,14 +2,7 @@ import LitematicViewer from '../../LitematicViewer';
 import DeepslateViewer from '../DeepslateViewer';
 import type { Schematic } from '../../core/Schematic';
 import type { TraversalOrder } from '../../core/BlockStorage';
-
-/** Props shared by both 3D viewer components. */
-export interface ViewerRendererProps {
-  litematic: Schematic | null;
-  unpackingMethod?: 'spanning' | 'non-spanning';
-  onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
-  onBlockInteract?: (x: number, y: number, z: number, shiftKey: boolean) => void;
-}
+import type { InteractionMode, SelectionMode, EditMode, BoxSelectionState } from '../../types';
 
 interface ViewerPanelProps {
   litematicObj: Schematic | null;
@@ -22,10 +15,19 @@ interface ViewerPanelProps {
   traversalOrder: TraversalOrder;
 
   onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
-  onBlockInteract?: (x: number, y: number, z: number, shiftKey: boolean) => void;
   selectedBlocks?: Set<string>;
-  selectedBlockType?: string;
-  activeTool?: string;
+  activeBlockType?: string;
+
+  interactionMode?: InteractionMode;
+  selectionMode?: SelectionMode;
+  editMode?: EditMode;
+  boxSelectionState?: BoxSelectionState;
+  onSelectionClick?: (x: number, y: number, z: number, additive: boolean, subtractive: boolean) => void;
+  onBoxSelectStart?: (x: number, y: number, z: number) => void;
+  onBoxSelectUpdate?: (x: number, y: number, z: number) => void;
+  onBoxSelectEnd?: () => void;
+  onEditClick?: (x: number, y: number, z: number) => void;
+
   structureVersion?: number;
 }
 
@@ -38,9 +40,16 @@ export default function ViewerPanel({
   unpackingMethod,
   traversalOrder,
   onHoverBlock,
-  onBlockInteract,
   selectedBlocks,
-  activeTool,
+  interactionMode,
+  selectionMode,
+  editMode,
+  boxSelectionState,
+  onSelectionClick,
+  onBoxSelectStart,
+  onBoxSelectUpdate,
+  onBoxSelectEnd,
+  onEditClick,
   structureVersion,
 }: ViewerPanelProps) {
 
@@ -76,9 +85,16 @@ export default function ViewerPanel({
                 litematic={litematicObj}
                 unpackingMethod={unpackingMethod}
                 onHoverBlock={onHoverBlock}
-                onBlockInteract={onBlockInteract}
                 selectedBlocks={selectedBlocks}
-                activeTool={activeTool}
+                interactionMode={interactionMode}
+                selectionMode={selectionMode}
+                editMode={editMode}
+                boxSelectionState={boxSelectionState}
+                onSelectionClick={onSelectionClick}
+                onBoxSelectStart={onBoxSelectStart}
+                onBoxSelectUpdate={onBoxSelectUpdate}
+                onBoxSelectEnd={onBoxSelectEnd}
+                onEditClick={onEditClick}
                 structureVersion={structureVersion}
               />
             ) : (

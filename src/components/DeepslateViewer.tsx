@@ -4,7 +4,9 @@ import { SchematicStructureProvider } from '../core/SchematicStructureProvider';
 import { BlockDefinition, BlockModel, StructureRenderer, TextureAtlas, type Resources, type ItemRendererResources, Identifier } from 'deepslate';
 import { mat4, vec3 } from 'gl-matrix';
 import { LineRenderer } from '../utils/LineRenderer';
+import { FilledBoxRenderer } from '../utils/FilledBoxRenderer';
 import { useBlockRaycast } from '../hooks/useBlockRaycast';
+import type { InteractionMode, SelectionMode, BoxSelectionState } from '../types';
 
 // Import assets
 // @ts-ignore
@@ -23,9 +25,16 @@ interface DeepslateViewerProps {
   litematic: Schematic | null;
   unpackingMethod?: 'spanning' | 'non-spanning';
   onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
-  onBlockInteract?: (x: number, y: number, z: number, shiftKey: boolean) => void;
   selectedBlocks?: Set<string>;
-  activeTool?: string;
+  interactionMode?: InteractionMode;
+  selectionMode?: SelectionMode;
+  editMode?: EditMode;
+  boxSelectionState?: BoxSelectionState;
+  onSelectionClick?: (x: number, y: number, z: number, additive: boolean, subtractive: boolean) => void;
+  onBoxSelectStart?: (x: number, y: number, z: number) => void;
+  onBoxSelectUpdate?: (x: number, y: number, z: number) => void;
+  onBoxSelectEnd?: () => void;
+  onEditClick?: (x: number, y: number, z: number) => void;
   /** Incremented after batch edits to trigger a full GPU buffer rebuild. */
   structureVersion?: number;
 }
@@ -59,14 +68,24 @@ function getChunkPos(x: number, y: number, z: number): [number, number, number] 
   ];
 }
 
-export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlock, onBlockInteract, selectedBlocks, activeTool, structureVersion }: DeepslateViewerProps) {
+export default function DeepslateViewer({
+  litematic, unpackingMethod, onHoverBlock,
+  selectedBlocks,
+  interactionMode, selectionMode,
+  boxSelectionState,
+  onSelectionClick, onBoxSelectStart, onBoxSelectUpdate, onBoxSelectEnd,
+  onEditClick,
+  structureVersion,
+}: DeepslateViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<StructureRenderer | null>(null);
   const lineRendererRef = useRef<LineRenderer | null>(null);
+  const filledBoxRendererRef = useRef<FilledBoxRenderer | null>(null);
   const providerRef = useRef<SchematicStructureProvider | null>(null);
   const dirtyChunksRef = useRef<Set<string>>(new Set());
 
   const { getHighlightBlock, onRaycastMouseMove, onRaycastMouseLeave } = useBlockRaycast();
+  const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Cached coordinate offset (deepslate local → global)
   const minOffsetRef = useRef<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
@@ -75,8 +94,18 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
   const lastHoveredBlockRef = useRef<{ x: number, y: number, z: number } | null>(null);
   const onHoverBlockRef = useRef(onHoverBlock);
   onHoverBlockRef.current = onHoverBlock;
-  const onBlockClickRef = useRef(onBlockInteract);
-  onBlockClickRef.current = onBlockInteract;
+
+  // Interaction callbacks refs
+  const onSelectionClickRef = useRef(onSelectionClick);
+  onSelectionClickRef.current = onSelectionClick;
+  const onEditClickRef = useRef(onEditClick);
+  onEditClickRef.current = onEditClick;
+  const onBoxSelectStartRef = useRef(onBoxSelectStart);
+  onBoxSelectStartRef.current = onBoxSelectStart;
+  const onBoxSelectUpdateRef = useRef(onBoxSelectUpdate);
+  onBoxSelectUpdateRef.current = onBoxSelectUpdate;
+  const onBoxSelectEndRef = useRef(onBoxSelectEnd);
+  onBoxSelectEndRef.current = onBoxSelectEnd;
 
   const resourcesRef = useRef<Resources & ItemRendererResources | null>(null);
   const [loading, setLoading] = useState(true);
@@ -202,6 +231,7 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
 
     rendererRef.current = renderer;
     lineRendererRef.current = new LineRenderer(gl);
+    filledBoxRendererRef.current = new FilledBoxRenderer(gl);
 
     // Initialize camera
     const size = provider.getSize();
@@ -349,6 +379,7 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
           dirtyChunksRef.current.clear();
         }
 
+        // 1. deepslate structure rendering + grid
         rendererRef.current.drawStructure(view);
         rendererRef.current.drawGrid(view);
 
@@ -361,14 +392,61 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
           mat4.perspective(projMatrix, fieldOfView, aspect, zNear, zFar);
 
           const sSize = structureSizeRef.current;
+          const off = minOffsetRef.current;
+
+          // 2. Structure boundary box (yellow)
           lineRendererRef.current.drawBox(
             view, projMatrix,
             [0, 0, 0],
             [sSize[0], sSize[1], sSize[2]],
-            [1, 1, 0], // Yellow box
+            [1, 1, 0],
           );
 
-          // Raycast using Schematic directly (not deepslate Structure)
+          // 3. Selected blocks: semi-transparent filled (cyan, alpha=0.3)
+          if (selectedBlocks && selectedBlocks.size > 0 && filledBoxRendererRef.current) {
+            const selectionBoxes: Array<{ min: [number, number, number]; max: [number, number, number] }> = [];
+            selectedBlocks.forEach(key => {
+              const parts = key.split(',').map(Number);
+              const gx = parts[0], gy = parts[1], gz = parts[2];
+              const lx = gx - off.x;
+              const ly = gy - off.y;
+              const lz = gz - off.z;
+              selectionBoxes.push({
+                min: [lx, ly, lz],
+                max: [lx + 1, ly + 1, lz + 1],
+              });
+              // 4. Selected blocks: cyan wireframe overlay
+              lineRendererRef.current!.drawBox(
+                view, projMatrix,
+                [lx, ly, lz],
+                [lx + 1, ly + 1, lz + 1],
+                [0.2, 0.8, 1.0], // Cyan
+              );
+            });
+            filledBoxRendererRef.current.drawFilledBoxes(
+              view, projMatrix, selectionBoxes,
+              [0.2, 0.8, 1.0, 0.3], // Cyan with alpha
+            );
+          }
+
+          // 5. Box selection preview (blue wireframe, while dragging)
+          if (boxSelectionState?.active) {
+            const bs = boxSelectionState;
+            const minX = Math.min(bs.startX, bs.endX) - off.x;
+            const minY = Math.min(bs.startY, bs.endY) - off.y;
+            const minZ = Math.min(bs.startZ, bs.endZ) - off.z;
+            const maxX = Math.max(bs.startX, bs.endX) - off.x;
+            const maxY = Math.max(bs.startY, bs.endY) - off.y;
+            const maxZ = Math.max(bs.startZ, bs.endZ) - off.z;
+            lineRendererRef.current.drawBox(
+              view, projMatrix,
+              [minX, minY, minZ],
+              [maxX + 1, maxY + 1, maxZ + 1],
+              [0.2, 0.6, 1.0], // Blue
+            );
+          }
+
+          // Raycast for hover
           const hit = getHighlightBlock(
             litematic,
             minOffsetRef.current,
@@ -378,51 +456,52 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
             projMatrix,
           );
 
-          // Draw selected blocks (green boxes)
-          if (selectedBlocks && selectedBlocks.size > 0) {
-            const off = minOffsetRef.current;
-            selectedBlocks.forEach(key => {
-              const parts = key.split(',').map(Number);
-              const gx = parts[0], gy = parts[1], gz = parts[2];
-              const lx = gx - off.x;
-              const ly = gy - off.y;
-              const lz = gz - off.z;
-              lineRendererRef.current!.drawBox(
-                view, projMatrix,
-                [lx, ly, lz],
-                [lx + 1, ly + 1, lz + 1],
-                [0, 0.8, 0.2], // Green selection
-              );
-            });
-          }
-
-          // Draw hover highlight
+          // 6. Hover highlight / edit preview
           if (hit) {
-            lineRendererRef.current.drawBox(
-              view, projMatrix,
-              [hit.position[0], hit.position[1], hit.position[2]],
-              [hit.position[0] + 1, hit.position[1] + 1, hit.position[2] + 1],
-              [1, 1, 1], // White highlight
-            );
+            const hx = hit.position[0];
+            const hy = hit.position[1];
+            const hz = hit.position[2];
+            const gx = hx + off.x;
+            const gy = hy + off.y;
+            const gz = hz + off.z;
+            const hoverKey = `${gx},${gy},${gz}`;
+            const isInSelection = !selectedBlocks || selectedBlocks.size === 0 || (selectedBlocks.has(hoverKey));
+
+            if (interactionMode === 'editing') {
+              // Editing mode: red or orange hover
+              const editColor: [number, number, number] = isInSelection
+                ? [1.0, 0.5, 0.2]  // Orange (no selection = all editable)
+                : [1.0, 0.2, 0.2]; // Red (outside selection)
+              lineRendererRef.current.drawBox(
+                view, projMatrix,
+                [hx, hy, hz],
+                [hx + 1, hy + 1, hz + 1],
+                editColor,
+              );
+            } else {
+              // Selection mode: white hover
+              lineRendererRef.current.drawBox(
+                view, projMatrix,
+                [hx, hy, hz],
+                [hx + 1, hy + 1, hz + 1],
+                [1, 1, 1], // White
+              );
+            }
 
             const last = lastHoveredBlockRef.current;
-            const pos = hit.position;
-            if (!last || last.x !== pos[0] || last.y !== pos[1] || last.z !== pos[2]) {
-              lastHoveredBlockRef.current = { x: pos[0], y: pos[1], z: pos[2] };
+            if (!last || last.x !== hx || last.y !== hy || last.z !== hz) {
+              lastHoveredBlockRef.current = { x: hx, y: hy, z: hz };
 
               let name = 'Unknown Block';
               if (litematic) {
-                const off = minOffsetRef.current;
-                const blockInfo = litematic.getBlock(
-                  pos[0] + off.x, pos[1] + off.y, pos[2] + off.z,
-                );
+                const blockInfo = litematic.getBlock(gx, gy, gz);
                 if (blockInfo) {
                   name = blockInfo.Name;
                 }
               }
 
               if (onHoverBlockRef.current) {
-                onHoverBlockRef.current({ x: pos[0], y: pos[1], z: pos[2], name });
+                onHoverBlockRef.current({ x: hx, y: hy, z: hz, name });
               }
             }
           } else {
@@ -434,6 +513,7 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
             }
           }
 
+          // 7. Axes
           lineRendererRef.current.drawAxes(view, projMatrix, 1000);
         }
       }
@@ -442,22 +522,38 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
 
     requestRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(requestRef.current);
-  }, [cameraRotation, moveSpeed, litematic, getHighlightBlock, selectedBlocks]);
+  }, [cameraRotation, moveSpeed, litematic, getHighlightBlock, selectedBlocks, boxSelectionState, interactionMode]);
 
   // ── Mouse Controls ───────────────────────────────────────────
 
   const isDragging = useRef(false);
+  const isRightDrag = useRef(false);
   const hasDragged = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
+  const isBoxSelecting = useRef(false);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     isDragging.current = true;
     hasDragged.current = false;
+    isRightDrag.current = e.button === 2;
     lastMouse.current = { x: e.clientX, y: e.clientY };
+
+    // Selection + Box mode: start box selection on left mouse
+    if (e.button === 0 && interactionMode === 'selection' && selectionMode === 'box') {
+      const hovered = lastHoveredBlockRef.current;
+      if (hovered) {
+        isBoxSelecting.current = true;
+        const off = minOffsetRef.current;
+        onBoxSelectStartRef.current?.(hovered.x + off.x, hovered.y + off.y, hovered.z + off.z);
+      }
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging.current) {
+    mousePosRef.current = { x: e.clientX, y: e.clientY };
+
+    if (isDragging.current && isRightDrag.current) {
+      // Right drag: rotate camera (always available)
       const dx = e.clientX - lastMouse.current.x;
       const dy = e.clientY - lastMouse.current.y;
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
@@ -472,28 +568,97 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
         return { yaw: newYaw, pitch: newPitch };
       });
       lastMouse.current = { x: e.clientX, y: e.clientY };
+    } else if (isDragging.current && isBoxSelecting.current) {
+      // Left drag during box selection
+      hasDragged.current = true;
+      lastMouse.current = { x: e.clientX, y: e.clientY };
+      // Box select update is handled via animation loop raycast
+    } else if (isDragging.current && !isRightDrag.current) {
+      // Left drag without box select — track for potential drag detection
+      const dx = e.clientX - lastMouse.current.x;
+      const dy = e.clientY - lastMouse.current.y;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        hasDragged.current = true;
+      }
     } else {
       onRaycastMouseMove(e);
     }
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
-    if (!hasDragged.current && onBlockClickRef.current) {
+    if (isBoxSelecting.current) {
+      // End box selection
+      isBoxSelecting.current = false;
+      onBoxSelectEndRef.current?.();
+    } else if (!hasDragged.current && e.button === 0) {
+      // Single click (no drag)
       const hovered = lastHoveredBlockRef.current;
       if (hovered) {
         const off = minOffsetRef.current;
+        const gx = hovered.x + off.x;
+        const gy = hovered.y + off.y;
+        const gz = hovered.z + off.z;
+
         // Mark chunk as dirty for incremental GPU buffer update
         const [cx, cy, cz] = getChunkPos(hovered.x, hovered.y, hovered.z);
         dirtyChunksRef.current.add(`${cx},${cy},${cz}`);
 
-        onBlockClickRef.current(
-          hovered.x + off.x, hovered.y + off.y, hovered.z + off.z,
-          e.shiftKey,
-        );
+        if (interactionMode === 'selection') {
+          onSelectionClickRef.current?.(gx, gy, gz, e.ctrlKey || e.metaKey, e.altKey);
+        } else if (interactionMode === 'editing') {
+          onEditClickRef.current?.(gx, gy, gz);
+        }
       }
     }
     isDragging.current = false;
+    isRightDrag.current = false;
   };
+
+  // Prevent context menu on canvas
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+  };
+
+  // Box selection: update endpoint via raycast in animation loop
+  // We store the latest raycast result for box select updates
+  const lastRaycastHitRef = useRef<{ x: number; y: number; z: number } | null>(null);
+
+  // Do raycast specifically for box select update on mouse move
+  useEffect(() => {
+    if (!isBoxSelecting.current) return;
+    const interval = setInterval(() => {
+      if (!isBoxSelecting.current || !canvasRef.current) return;
+      const mp = mousePosRef.current;
+      if (!mp) return;
+
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      const localX = mp.x - rect.left;
+      const localY = mp.y - rect.top;
+      if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) return;
+
+      // Simple raycast using the existing hook's logic indirectly
+      // We read the most recent hovered block
+      const hovered = lastHoveredBlockRef.current;
+      if (hovered) {
+        const off = minOffsetRef.current;
+        const gx = hovered.x + off.x;
+        const gy = hovered.y + off.y;
+        const gz = hovered.z + off.z;
+        if (!lastRaycastHitRef.current ||
+            lastRaycastHitRef.current.x !== gx ||
+            lastRaycastHitRef.current.y !== gy ||
+            lastRaycastHitRef.current.z !== gz) {
+          lastRaycastHitRef.current = { x: gx, y: gy, z: gz };
+          onBoxSelectUpdateRef.current?.(gx, gy, gz);
+        }
+      }
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+
+  const isSelection = interactionMode === 'selection';
+  const isEditing = interactionMode === 'editing';
 
   return (
     <div
@@ -509,14 +674,12 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onContextMenu={handleContextMenu}
       />
       <div className="viewport-overlay-hint" style={{position: 'absolute', bottom: 10, left: 10, color: '#aaa', fontSize: '0.8rem'}}>
-        {activeTool === 'select' && 'Select: Click | Shift+Click multi | Drag: Rotate | Scroll: Zoom | WASD: Move'}
-        {activeTool === 'place' && 'Place: Click | Drag: Rotate | Scroll: Zoom | WASD: Move'}
-        {activeTool === 'erase' && 'Erase: Click | Drag: Rotate | Scroll: Zoom | WASD: Move'}
-        {activeTool === 'fill' && 'Fill: Click | Drag: Rotate | Scroll: Zoom | WASD: Move'}
-        {activeTool === 'pick' && 'Pick: Click to sample | Drag: Rotate | Scroll: Zoom | WASD: Move'}
-        {!activeTool && 'Drag: Rotate | Scroll: Zoom | WASD: Move'}
+        {isSelection && 'Selection: Left Click | Add: Ctrl+Click | Sub: Alt+Click | Camera: Right Drag'}
+        {isEditing && 'Editing: Left Click | Camera: Right Drag'}
+        {!isSelection && !isEditing && 'Drag: Rotate | Scroll: Zoom | WASD: Move'}
       </div>
     </div>
   );

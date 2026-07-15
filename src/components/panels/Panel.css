@@ -1,0 +1,406 @@
+/* ── Shared Button Styles ─────────────────────────────── */
+.studio-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  background: #2a2a2a;
+  color: #ccc;
+  border: 1px solid #444;
+  border-radius: 3px;
+  cursor: pointer;
+  flex: 1;
+  text-align: center;
+  transition: background 0.15s, color 0.15s;
+}
+.studio-btn:hover:not(:disabled) {
+  background: #3a3a3a;
+  color: #fff;
+}
+.studio-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.studio-btn.danger {
+  background: #3a1a1a;
+  border-color: #5a2a2a;
+  color: #f88;
+}
+.studio-btn.danger:hover:not(:disabled) {
+  background: #5a2a2a;
+  color: #faa;
+}
+.studio-btn.confirm {
+  background: #1a3a1a;
+  border-color: #3a6a3a;
+  color: #8f8;
+}
+.studio-btn.confirm:hover:not(:disabled) {
+  background: #3a5a3a;
+  color: #afa;
+}
+
+/* ── Mode Toggle ─────────────────────────────────────── */
+.mode-toggle-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+}
+.mode-toggle-btn {
+  padding: 7px 5px;
+  font-size: 12px;
+  font-weight: bold;
+  background: #2a2a2a;
+  color: #999;
+  border: 1px solid #444;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-align: center;
+}
+.mode-toggle-btn:hover {
+  background: #333;
+  color: #ccc;
+}
+.mode-toggle-btn.active {
+  background: #1a3a5a;
+  border-color: #3a6a8a;
+  color: #5af;
+}
+
+/* ── Keyboard Hint ───────────────────────────────────── */
+.keyboard-hint {
+  font-size: 9px;
+  color: #555;
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* ── ToolPanel ────────────────────────────────────────── */
+.tool-grid {
+  display: grid;
+  gap: 3px;
+}
+.tool-grid.tool-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.tool-grid.tool-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+.tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 3px;
+  font-size: 11px;
+  background: #2a2a2a;
+  color: #ccc;
+  border: 1px solid #444;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.tool-btn:hover {
+  background: #333;
+  color: #fff;
+}
+.tool-btn.active {
+  background: #1a5a3a;
+  border-color: #3a7a4a;
+  color: #5f5;
+  font-weight: bold;
+}
+.modifier-btn.active {
+  background: #1a3a5a;
+  border-color: #3a6a8a;
+  color: #5af;
+}
+.tool-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.tool-label {
+  font-size: 9px;
+  margin-top: 2px;
+  text-transform: uppercase;
+}
+.active-block-display {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  background: #1a2a1a;
+  border: 1px solid #2a4a2a;
+  border-radius: 4px;
+  gap: 8px;
+}
+.active-block-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  border: 1px solid #555;
+  flex-shrink: 0;
+}
+.active-block-name {
+  font-size: 12px;
+  color: #8f8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Quick Block List */
+.block-quick-list {
+  max-height: 150px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.block-quick-item {
+  display: flex;
+  align-items: center;
+  padding: 3px 6px;
+  background: #252525;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font-size: 11px;
+  color: #ccc;
+  gap: 6px;
+}
+.block-quick-item:hover {
+  background: #303030;
+}
+.block-quick-item.active {
+  background: #1a3a1a;
+  border-color: #3a6a3a;
+  color: #8f8;
+}
+.block-quick-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid #555;
+  flex-shrink: 0;
+}
+.block-quick-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Recent Grid */
+.recent-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 3px;
+}
+.recent-swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.recent-swatch:hover {
+  border-color: #888;
+}
+.recent-swatch.active {
+  border-color: #5f5;
+}
+
+/* ── SelectionPanel ───────────────────────────────────── */
+.selection-count {
+  font-size: 12px;
+  font-weight: bold;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: #1a1a1a;
+  color: #666;
+  text-align: center;
+}
+.selection-count.has-selection {
+  background: #1a2a1a;
+  color: #8f8;
+}
+.selection-bbox {
+  font-size: 10px;
+  font-weight: normal;
+  color: #6a6;
+  margin-top: 2px;
+}
+.selection-mode-hint {
+  font-size: 10px;
+  color: #555;
+  text-align: center;
+  padding: 6px 0 2px;
+  border-top: 1px solid #333;
+}
+
+/* ── HistoryPanel ─────────────────────────────────────── */
+.history-list {
+  font-size: 12px;
+}
+.history-empty {
+  color: #555;
+  text-align: center;
+  padding: 20px 0;
+  font-style: italic;
+}
+.history-entry {
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.12s;
+  gap: 8px;
+}
+.history-entry:hover {
+  background: #333;
+}
+.history-entry.undone {
+  opacity: 0.5;
+}
+.history-entry.undone .history-label {
+  font-style: italic;
+}
+.history-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.history-dot.done {
+  background: #5a5;
+}
+.history-dot.undone {
+  background: #555;
+}
+.history-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #bbb;
+}
+.history-separator {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+  color: #555;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.history-separator::before,
+.history-separator::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid #444;
+}
+.history-separator span {
+  padding: 0 8px;
+}
+.history-footer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 0 2px;
+  font-size: 10px;
+  color: #666;
+  border-top: 1px solid #333;
+}
+.history-footer-spacer {
+  color: #444;
+}
+
+/* ── SwatchesPanel ────────────────────────────────────── */
+.swatch-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 4px;
+  align-content: start;
+}
+.swatch-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 3px;
+  background: #252525;
+  transition: border-color 0.15s;
+  position: relative;
+}
+.swatch-chip:hover {
+  border-color: #666;
+}
+.swatch-chip.active {
+  border-color: #5a5;
+  background: #1a2a1a;
+}
+.swatch-chip.has-replace:hover {
+  border-color: #5a5;
+  cursor: pointer;
+}
+.swatch-color {
+  width: 32px;
+  height: 32px;
+  border-radius: 2px;
+  border: 1px solid #444;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.swatch-color:hover {
+  transform: scale(1.08);
+}
+.swatch-label {
+  font-size: 9px;
+  color: #aaa;
+  margin-top: 3px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  cursor: text;
+}
+.swatch-label:hover {
+  color: #fff;
+}
+.swatch-replace-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  background: #3a6a3a;
+  color: #8f8;
+  font-size: 9px;
+  font-weight: bold;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.swatch-rename-input {
+  width: 100%;
+  padding: 2px 4px;
+  font-size: 10px;
+  background: #1f1f1f;
+  border: 1px solid #5a5;
+  color: #ddd;
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+.swatch-footer {
+  font-size: 10px;
+  color: #555;
+  text-align: center;
+  padding: 6px 0 2px;
+  border-top: 1px solid #333;
+  flex-shrink: 0;
+}

@@ -40,11 +40,11 @@ test.describe('Error Handling', () => {
     await expect(page.locator('.status-error')).not.toBeVisible({ timeout: 5000 });
   });
 
-  test('Palette panel shows "No file loaded" when empty', async ({ page }) => {
-    // Click the Palette tab to ensure it's visible
-    const paletteTab = page.locator('.flexlayout__tab_button').filter({ hasText: 'Palette' }).first();
-    await paletteTab.click();
-    // The palette panel content should show "No file loaded"
+  test('Swatches panel shows "No file loaded" when empty', async ({ page }) => {
+    // Click the Swatches tab to ensure it's visible
+    const swatchesTab = page.locator('.flexlayout__tab_button').filter({ hasText: 'Swatches' }).first();
+    await swatchesTab.click();
+    // The swatches panel content should show "No file loaded"
     await expect(page.locator('.flexlayout__tab').filter({ hasText: 'No file loaded' }).first()).toBeVisible({ timeout: 5000 });
   });
 

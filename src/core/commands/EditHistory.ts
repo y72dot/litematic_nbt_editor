@@ -68,6 +68,34 @@ export class EditHistory {
     return this.redoStack[this.redoStack.length - 1].getLabel();
   }
 
+  /** Number of commands in the undo stack. */
+  get undoStackSize(): number {
+    return this.undoStack.length;
+  }
+
+  /** Number of commands in the redo stack. */
+  get redoStackSize(): number {
+    return this.redoStack.length;
+  }
+
+  /**
+   * Returns all history entries for display, ordered oldest to newest.
+   * Entries in the undo stack are 'done', and entries in the redo stack are 'undone'.
+   */
+  getHistoryEntries(): import('../../types').HistoryEntry[] {
+    const entries: import('../../types').HistoryEntry[] = [];
+    let idx = 0;
+
+    for (const cmd of this.undoStack) {
+      entries.push({ index: idx++, label: cmd.getLabel(), status: 'done' });
+    }
+    for (const cmd of [...this.redoStack].reverse()) {
+      entries.push({ index: idx++, label: cmd.getLabel(), status: 'undone' });
+    }
+
+    return entries;
+  }
+
   /** Clear all history. */
   clear(): void {
     this.undoStack = [];

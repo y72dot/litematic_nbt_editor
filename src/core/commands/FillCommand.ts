@@ -22,6 +22,7 @@ export class FillCommand implements EditCommand {
   private startZ: number
   private newName: string
   private maxBlocks: number
+  private selection?: Set<string>
 
   /** Set during execute(), used by undo() */
   private filled: FillEntry[] = []
@@ -34,6 +35,7 @@ export class FillCommand implements EditCommand {
     z: number,
     newName: string,
     maxBlocks: number = DEFAULT_MAX_BLOCKS,
+    selection?: Set<string>,
   ) {
     this.schematic = schematic
     this.startX = x
@@ -41,6 +43,7 @@ export class FillCommand implements EditCommand {
     this.startZ = z
     this.newName = newName
     this.maxBlocks = maxBlocks
+    this.selection = selection
   }
 
   execute(): void {
@@ -111,6 +114,9 @@ export class FillCommand implements EditCommand {
             }
           }
           if (!inBounds) continue
+
+          // Selection constraint: only enqueue blocks within selection
+          if (this.selection && this.selection.size > 0 && !this.selection.has(key)) continue
 
           visited.add(key)
           queue.push({ x: nx, y: ny, z: nz })

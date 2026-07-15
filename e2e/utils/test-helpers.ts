@@ -93,21 +93,22 @@ export async function expectViewerHintVisible(page: Page) {
 // Palette helpers
 // ──────────────────────────────────────────────────────────────
 
-/** Get the palette panel content container. Uses a unique instruction text to identify it. */
+/** Get the swatches panel content container. Uses the unique footer hint text to identify it. */
 function palettePanel(page: Page) {
-  return page.locator('.flexlayout__tab').filter({ hasText: 'Click a block name to rename it' }).first();
+  return page.locator('.flexlayout__tab').filter({ hasText: /Double-click to rename|Click to set active block/ }).first();
 }
 
-/** Verify a palette entry exists (exact block name match). */
+/** Verify a palette entry exists (matches title attribute with full block name). */
 export async function expectPaletteEntry(page: Page, blockName: string) {
   const palette = palettePanel(page);
-  await expect(palette.getByText(blockName, { exact: true }).first()).toBeVisible({ timeout: 5000 });
+  // Search by title attribute which contains the full block name
+  await expect(palette.locator(`[title*="${blockName}"]`).first()).toBeVisible({ timeout: 5000 });
 }
 
 /** Verify a palette entry is absent. */
 export async function expectPaletteEntryAbsent(page: Page, blockName: string) {
   const palette = palettePanel(page);
-  await expect(palette.getByText(blockName, { exact: true }).first()).not.toBeVisible({ timeout: 5000 }).catch(() => {});
+  await expect(palette.locator(`[title*="${blockName}"]`).first()).not.toBeVisible({ timeout: 5000 }).catch(() => {});
 }
 
 /** Rename a palette block via the __e2e harness (reliable cross-React-version). */
@@ -221,6 +222,31 @@ export async function expectUndoLabel(page: Page, containsText: string | null) {
       .filter({ hasText: new RegExp(`Ctrl\\+Z:.*${escaped}`) }).first())
       .toBeVisible({ timeout: 5000 });
   }
+}
+
+// ──────────────────────────────────────────────────────────────
+// Interaction mode helpers
+// ──────────────────────────────────────────────────────────────
+
+/** Programmatically set the interaction mode. */
+export async function e2eSetInteractionMode(page: Page, mode: 'selection' | 'editing') {
+  await page.evaluate((m) => {
+    (window as any).__e2e.setInteractionMode(m);
+  }, mode);
+}
+
+/** Programmatically set the edit sub-mode. */
+export async function e2eSetEditMode(page: Page, mode: 'place' | 'erase' | 'fill' | 'pick') {
+  await page.evaluate((m) => {
+    (window as any).__e2e.setEditMode(m);
+  }, mode);
+}
+
+/** Programmatically set the selection sub-mode. */
+export async function e2eSetSelectionMode(page: Page, mode: 'point' | 'box' | 'similar') {
+  await page.evaluate((m) => {
+    (window as any).__e2e.setSelectionMode(m);
+  }, mode);
 }
 
 // ──────────────────────────────────────────────────────────────

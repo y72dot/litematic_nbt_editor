@@ -6,15 +6,29 @@ test.describe('Panels - Window Menu Toggle', () => {
     await waitForAppReady(page);
   });
 
-  test('Metadata tab is open by default', async ({ page }) => {
-    // The "Metadata" tab should be visible in the layout
-    const metadataTab = page.locator('.flexlayout__tab_button').filter({ hasText: 'Metadata' }).first();
-    await expect(metadataTab).toBeVisible({ timeout: 5000 });
+  test('Tools tab is open by default', async ({ page }) => {
+    const toolsTab = page.locator('.flexlayout__tab_button').filter({ hasText: 'Tools' }).first();
+    await expect(toolsTab).toBeVisible({ timeout: 5000 });
   });
 
-  test('Palette tab is open by default', async ({ page }) => {
-    const paletteTab = page.locator('.flexlayout__tab_button').filter({ hasText: 'Palette' }).first();
-    await expect(paletteTab).toBeVisible({ timeout: 5000 });
+  test('Selection tab is open by default', async ({ page }) => {
+    const selectionTab = page.locator('.flexlayout__tab_button').filter({ hasText: 'Selection' }).first();
+    await expect(selectionTab).toBeVisible({ timeout: 5000 });
+  });
+
+  test('Swatches tab is open by default', async ({ page }) => {
+    const swatchesTab = page.locator('.flexlayout__tab_button').filter({ hasText: 'Swatches' }).first();
+    await expect(swatchesTab).toBeVisible({ timeout: 5000 });
+  });
+
+  test('History tab is open by default', async ({ page }) => {
+    const historyTab = page.locator('.flexlayout__tab_button').filter({ hasText: 'History' }).first();
+    await expect(historyTab).toBeVisible({ timeout: 5000 });
+  });
+
+  test('Metadata tab is open by default', async ({ page }) => {
+    const metadataTab = page.locator('.flexlayout__tab_button').filter({ hasText: 'Metadata' }).first();
+    await expect(metadataTab).toBeVisible({ timeout: 5000 });
   });
 
   test('Settings tab is open by default', async ({ page }) => {

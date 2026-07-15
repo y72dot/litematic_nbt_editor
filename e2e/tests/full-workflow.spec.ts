@@ -36,8 +36,8 @@ test.describe('Full Workflow - Golden Path', () => {
     // Status bar shows size info (3×3×3)
     await expectStatusText(page, /3/);
 
-    // All 5 palette entries visible — switch to Palette tab first
-    await switchToTab(page, 'Palette');
+    // All 5 swatch entries visible — switch to Swatches tab first
+    await switchToTab(page, 'Swatches');
     await page.waitForTimeout(200);
     await expectPaletteEntry(page, 'minecraft:air');
     await expectPaletteEntry(page, 'minecraft:stone');
@@ -112,7 +112,7 @@ test.describe('Full Workflow - Golden Path', () => {
     await expectUndoLabel(page, 'Set block at (2, 0, 0)');
 
     // Verify netherrack auto-added to palette
-    await switchToTab(page, 'Palette');
+    await switchToTab(page, 'Swatches');
     await page.waitForTimeout(200);
     await expectPaletteEntry(page, 'minecraft:netherrack');
   });
@@ -124,11 +124,11 @@ test.describe('Full Workflow - Golden Path', () => {
     // Select two known non-air positions: (0,0,0)=stone, (1,1,1)=dirt
     await e2eSetSelectedBlocks(page, ['0,0,0', '1,1,1']);
 
-    // Verify palette shows selection count
-    await switchToTab(page, 'Palette');
+    // Verify selection count in SelectionPanel
+    await switchToTab(page, 'Selection');
     await page.waitForTimeout(200);
-    const paletteContent = page.locator('.flexlayout__tab').filter({ hasText: 'Click a block name to rename it' }).first();
-    await expect(paletteContent).toContainText('2 blocks selected', { timeout: 5000 });
+    const selectionContent = page.locator('.flexlayout__tab').filter({ hasText: /block(s)? selected/ }).first();
+    await expect(selectionContent).toContainText('2 blocks selected', { timeout: 5000 });
 
     // Programmatic replace
     await e2eReplaceBlocks(page, 'minecraft:oak_planks');
@@ -257,7 +257,7 @@ test.describe('Full Workflow - Golden Path', () => {
     await nameInput.fill('Round Trip Test');
 
     // Step 2: Rename palette block
-    await switchToTab(page, 'Palette');
+    await switchToTab(page, 'Swatches');
     await page.waitForTimeout(300);
     await renamePaletteBlock(page, 'minecraft:stone', 'minecraft:custom_stone');
 
@@ -290,7 +290,7 @@ test.describe('Full Workflow - Golden Path', () => {
     await expect(page.locator('.studio-input').first()).toHaveValue('Round Trip Test', { timeout: 5000 });
 
     // Step 8: Verify palette rename persisted
-    await switchToTab(page, 'Palette');
+    await switchToTab(page, 'Swatches');
     await page.waitForTimeout(200);
     await expectPaletteEntry(page, 'minecraft:custom_stone');
     await expectPaletteEntryAbsent(page, 'minecraft:stone');
@@ -458,7 +458,7 @@ test.describe('Full Workflow - Structure (.nbt)', () => {
     await waitForFileLoad(page);
 
     // Rename a block
-    await switchToTab(page, 'Palette');
+    await switchToTab(page, 'Swatches');
     await page.waitForTimeout(300);
     await renamePaletteBlock(page, 'minecraft:stone', 'minecraft:renamed_stone');
 
@@ -478,7 +478,7 @@ test.describe('Full Workflow - Structure (.nbt)', () => {
     await waitForFileLoad(page);
 
     // Verify rename persisted
-    await switchToTab(page, 'Palette');
+    await switchToTab(page, 'Swatches');
     await page.waitForTimeout(200);
     await expectPaletteEntry(page, 'minecraft:renamed_stone');
     await expectPaletteEntryAbsent(page, 'minecraft:stone');
@@ -505,7 +505,7 @@ test.describe('Full Workflow - Multi-Region', () => {
   test('4.2 palette lists blocks from both regions', async ({ page }) => {
     await uploadFixture(page, 'multi-region.litematic');
     await waitForFileLoad(page);
-    await switchToTab(page, 'Palette');
+    await switchToTab(page, 'Swatches');
     await page.waitForTimeout(200);
 
     // Both regions have the same palette (air + stone), so they appear
@@ -536,7 +536,7 @@ test.describe('Full Workflow - Error Recovery', () => {
     await expect(page.locator('.status-error')).not.toBeVisible({ timeout: 5000 }).catch(() => {});
 
     // App should be functional — palette should load
-    await switchToTab(page, 'Palette');
+    await switchToTab(page, 'Swatches');
     await page.waitForTimeout(200);
     await expectPaletteEntry(page, 'minecraft:stone');
   });

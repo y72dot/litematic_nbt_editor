@@ -160,13 +160,25 @@ export default function MenuBar(props: MenuBarProps) {
         <span>Window</span>
         {activeMenu === 'window' && (
           <div className="dropdown-menu">
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('tools', 'Tools'))}>
+              <span className="dropdown-icon">{props.isPanelOpen('tools') ? '✓' : ''}</span>
+              <span>Tools</span>
+            </div>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('selection', 'Selection'))}>
+              <span className="dropdown-icon">{props.isPanelOpen('selection') ? '✓' : ''}</span>
+              <span>Selection</span>
+            </div>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('swatches', 'Swatches'))}>
+              <span className="dropdown-icon">{props.isPanelOpen('swatches') ? '✓' : ''}</span>
+              <span>Swatches</span>
+            </div>
+            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('history', 'History'))}>
+              <span className="dropdown-icon">{props.isPanelOpen('history') ? '✓' : ''}</span>
+              <span>History</span>
+            </div>
             <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('metadata', 'Metadata'))}>
               <span className="dropdown-icon">{props.isPanelOpen('metadata') ? '✓' : ''}</span>
               <span>Metadata</span>
-            </div>
-            <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('palette', 'Palette'))}>
-              <span className="dropdown-icon">{props.isPanelOpen('palette') ? '✓' : ''}</span>
-              <span>Palette Editor</span>
             </div>
             <div className="dropdown-item" onClick={() => handleItemClick(() => props.togglePanel('settings', 'Settings'))}>
               <span className="dropdown-icon">{props.isPanelOpen('settings') ? '✓' : ''}</span>

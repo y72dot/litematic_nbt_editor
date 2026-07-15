@@ -60,7 +60,7 @@ test.describe('Menu Bar', () => {
 
   test('Window menu shows panel toggles', async ({ page }) => {
     await openMenu(page, 'Window');
-    await expect(page.locator('.dropdown-item')).toContainText(['Metadata', 'Palette Editor', 'Advanced Settings', 'Raw NBT Data']);
+    await expect(page.locator('.dropdown-item')).toContainText(['Tools', 'Selection', 'Swatches', 'History', 'Metadata', 'Advanced Settings', 'Raw NBT Data']);
   });
 
   test('Help menu shows About and Deepslate GitHub', async ({ page }) => {
