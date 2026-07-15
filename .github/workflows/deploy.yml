@@ -20,16 +20,14 @@ jobs:
 
       - run: npx vite build
 
-      - name: Deploy to Server
-        uses: easingthemes/ssh-deploy@v4
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          ARGS: "-rltgoDzvO --delete"
-          SOURCE: "dist/"
-          REMOTE_HOST: ${{ secrets.SSH_HOST }}
-          REMOTE_USER: ${{ secrets.SSH_USER }}
-          TARGET: "/var/www/nbt-editor/releases/${{ github.run_id }}/"
-          SCRIPT_AFTER: |
-            ln -sfn /var/www/nbt-editor/releases/${{ github.run_id }} /var/www/nbt-editor/current
-            ls -dt /var/www/nbt-editor/releases/*/ | tail -n +6 | xargs -r rm -rf
-            sudo systemctl reload nginx
+      - name: Deploy via rsync
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          rsync -e "ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key" \
+            -rltgoDzvO --delete \
+            dist/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/nbt-editor/releases/${{ github.run_id }}/
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "ln -sfn /var/www/nbt-editor/releases/${{ github.run_id }} /var/www/nbt-editor/current && ls -dt /var/www/nbt-editor/releases/*/ | tail -n +6 | xargs -r rm -rf && sudo systemctl reload nginx"
