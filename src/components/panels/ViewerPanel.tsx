@@ -8,7 +8,7 @@ export interface ViewerRendererProps {
   litematic: Schematic | null;
   unpackingMethod?: 'spanning' | 'non-spanning';
   onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
-  onBlockClick?: (x: number, y: number, z: number, shiftKey: boolean) => void;
+  onBlockInteract?: (x: number, y: number, z: number, shiftKey: boolean) => void;
 }
 
 interface ViewerPanelProps {
@@ -22,9 +22,10 @@ interface ViewerPanelProps {
   traversalOrder: TraversalOrder;
 
   onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
-  onBlockClick?: (x: number, y: number, z: number, shiftKey: boolean) => void;
+  onBlockInteract?: (x: number, y: number, z: number, shiftKey: boolean) => void;
   selectedBlocks?: Set<string>;
   selectedBlockType?: string;
+  activeTool?: string;
   structureVersion?: number;
 }
 
@@ -37,8 +38,9 @@ export default function ViewerPanel({
   unpackingMethod,
   traversalOrder,
   onHoverBlock,
-  onBlockClick,
+  onBlockInteract,
   selectedBlocks,
+  activeTool,
   structureVersion,
 }: ViewerPanelProps) {
 
@@ -74,8 +76,9 @@ export default function ViewerPanel({
                 litematic={litematicObj}
                 unpackingMethod={unpackingMethod}
                 onHoverBlock={onHoverBlock}
-                onBlockClick={onBlockClick}
+                onBlockInteract={onBlockInteract}
                 selectedBlocks={selectedBlocks}
+                activeTool={activeTool}
                 structureVersion={structureVersion}
               />
             ) : (
@@ -85,9 +88,6 @@ export default function ViewerPanel({
                 traversalOrder={traversalOrder}
               />
             )}
-            <div className="viewport-overlay-hint">
-              LMB: Rotate | RMB: Pan | Scroll: Zoom | WASD+Space: Move
-            </div>
          </>
       )}
     </div>

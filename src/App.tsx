@@ -18,7 +18,8 @@ import { detectSchematicFormat } from './utils/formatDetector'
 import { EditHistory } from './core/commands/EditHistory'
 import { SetBlockCommand } from './core/commands/SetBlockCommand'
 import { BatchSetBlockCommand } from './core/commands/BatchSetBlockCommand'
-import type { LitematicMetadata } from './types'
+import { FillCommand } from './core/commands/FillCommand'
+import type { LitematicMetadata, ToolMode } from './types'
 
 // Panel Components
 import ViewerPanel from './components/panels/ViewerPanel'
@@ -26,6 +27,7 @@ import MetadataPanel from './components/panels/MetadataPanel'
 import PalettePanel from './components/panels/PalettePanel'
 import SettingsPanel from './components/panels/SettingsPanel'
 import NbtPanel from './components/panels/NbtPanel'
+import ToolsPanel from './components/panels/ToolsPanel'
 
 // Explicitly ensure Buffer is on window if not already there
 if (typeof window !== 'undefined' && !window.Buffer) {
@@ -82,6 +84,11 @@ const defaultLayout: IJsonModel = {
             type: 'tabset',
             weight: 50,
             children: [
+              {
+                type: 'tab',
+                name: 'Tools',
+                component: 'tools'
+              },
               {
                 type: 'tab',
                 name: 'Settings',
@@ -153,23 +160,42 @@ function App() {
   // Interaction State
   const [highlightedBlock, setHighlightedBlock] = useState<{ x: number, y: number, z: number, name: string } | null>(null);
   const [selectedBlocks, setSelectedBlocks] = useState<Set<string>>(new Set());
-  const selectedBlockType = 'minecraft:stone';
+  const [activeTool, setActiveTool] = useState<ToolMode>('select');
+  const [activeBlockType, setActiveBlockType] = useState('minecraft:stone');
   const [structureVersion, setStructureVersion] = useState(0);
 
-  // Handle block click (select single, or shift+click for multi-select)
-  const handleBlockClick = (x: number, y: number, z: number, shiftKey: boolean) => {
+  // ── Block interaction: routes based on active tool ──────────
+  const handleBlockInteract = (x: number, y: number, z: number, shiftKey: boolean) => {
+    switch (activeTool) {
+      case 'select':
+        handleSelectBlock(x, y, z, shiftKey);
+        break;
+      case 'place':
+        handleSetBlock(x, y, z, activeBlockType);
+        break;
+      case 'erase':
+        handleSetBlock(x, y, z, 'minecraft:air');
+        break;
+      case 'fill':
+        handleFill(x, y, z);
+        break;
+      case 'pick':
+        handlePickBlock(x, y, z);
+        break;
+    }
+  };
+
+  const handleSelectBlock = (x: number, y: number, z: number, shiftKey: boolean) => {
     const key = `${x},${y},${z}`;
     setSelectedBlocks(prev => {
       const next = new Set(prev);
       if (shiftKey) {
-        // Toggle selection
         if (next.has(key)) {
           next.delete(key);
         } else {
           next.add(key);
         }
       } else {
-        // Replace selection
         next.clear();
         next.add(key);
       }
@@ -195,11 +221,62 @@ function App() {
   // Set block at global coordinates (via EditHistory for undo support)
   const handleSetBlock = (x: number, y: number, z: number, blockName?: string) => {
     if (!litematicObj) return;
-    const name = blockName ?? selectedBlockType;
+    const name = blockName ?? activeBlockType;
     const command = new SetBlockCommand(litematicObj, x, y, z, name);
     editHistoryRef.current.execute(command);
     syncHistoryState();
     forceUpdate();
+  };
+
+  // Flood-fill from position
+  const handleFill = (x: number, y: number, z: number) => {
+    if (!litematicObj) return;
+    try {
+      const command = new FillCommand(litematicObj, x, y, z, activeBlockType);
+      editHistoryRef.current.execute(command);
+      syncHistoryState();
+      setStructureVersion(v => v + 1);
+      forceUpdate();
+    } catch (err: any) {
+      console.error('Fill failed:', err.message);
+    }
+  };
+
+  // Pick block type from scene
+  const handlePickBlock = (x: number, y: number, z: number) => {
+    if (!litematicObj) return;
+    const block = litematicObj.getBlock(x, y, z);
+    if (block) {
+      setActiveBlockType(block.Name);
+      // Switch back to place mode after picking
+      setActiveTool('place');
+    }
+  };
+
+  // Select all non-air blocks in all regions
+  const handleSelectAll = () => {
+    if (!litematicObj) return;
+    const keys = new Set<string>();
+    for (const region of litematicObj.regions) {
+      for (let y = 0; y < region.size.y; y++) {
+        for (let z = 0; z < region.size.z; z++) {
+          for (let x = 0; x < region.size.x; x++) {
+            const gx = x + region.position.x;
+            const gy = y + region.position.y;
+            const gz = z + region.position.z;
+            const block = litematicObj.getBlock(gx, gy, gz);
+            if (block && block.Name !== 'minecraft:air') {
+              keys.add(`${gx},${gy},${gz}`);
+            }
+          }
+        }
+      }
+    }
+    setSelectedBlocks(keys);
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedBlocks(new Set());
   };
 
   // File Handling
@@ -380,6 +457,14 @@ function App() {
       getEditHistory: () => editHistoryRef.current,
       getUndoLabel: () => editHistoryRef.current.undoLabel,
       getRedoLabel: () => editHistoryRef.current.redoLabel,
+      getActiveTool: () => activeTool,
+      setActiveTool: (tool: ToolMode) => setActiveTool(tool),
+      getActiveBlockType: () => activeBlockType,
+      setActiveBlockType: (block: string) => setActiveBlockType(block),
+      fill: handleFill,
+      pickBlock: handlePickBlock,
+      selectAll: handleSelectAll,
+      deselectAll: handleDeselectAll,
       forceUpdate,
     };
   }
@@ -400,9 +485,10 @@ function App() {
             unpackingMethod={unpackingMethod}
             traversalOrder={traversalOrder}
             onHoverBlock={setHighlightedBlock}
-            onBlockClick={handleBlockClick}
+            onBlockInteract={handleBlockInteract}
             selectedBlocks={selectedBlocks}
-            selectedBlockType={selectedBlockType}
+            selectedBlockType={activeBlockType}
+            activeTool={activeTool}
             structureVersion={structureVersion}
           />
         );
@@ -418,9 +504,37 @@ function App() {
             onReplaceBlocks={handleReplaceBlocks}
           />
         );
+      case 'tools':
+        return (
+          <ToolsPanel
+            activeTool={activeTool}
+            onToolChange={setActiveTool}
+            activeBlockType={activeBlockType}
+            onBlockTypeChange={setActiveBlockType}
+            selectionCount={selectedBlocks.size}
+            onSelectAll={handleSelectAll}
+            onDeselectAll={handleDeselectAll}
+            onReplaceSelection={handleReplaceBlocks}
+            onDeleteSelection={() => handleReplaceBlocks('minecraft:air')}
+            canUndo={editHistoryRef.current.canUndo}
+            canRedo={editHistoryRef.current.canRedo}
+            undoLabel={undoLabel}
+            redoLabel={redoLabel}
+            onUndo={() => {
+              const label = editHistoryRef.current.undo();
+              if (label) { syncHistoryState(); setStructureVersion(v => v + 1); forceUpdate(); }
+            }}
+            onRedo={() => {
+              const label = editHistoryRef.current.redo();
+              if (label) { syncHistoryState(); setStructureVersion(v => v + 1); forceUpdate(); }
+            }}
+            litematicObj={litematicObj}
+            getBlockColor={getBlockColor}
+          />
+        );
       case 'settings':
         return (
-          <SettingsPanel 
+          <SettingsPanel
             unpackingMethod={unpackingMethod}
             setUnpackingMethod={setUnpackingMethod}
             traversalOrder={traversalOrder}
@@ -464,7 +578,7 @@ function App() {
               for (const child of children) {
                   // FlexLayout types might need casting if getChildren returns generic nodes
                   const comp = (child as TabNode).getComponent();
-                  if (['metadata', 'palette', 'settings', 'nbt'].includes(comp as string)) {
+                  if (['metadata', 'palette', 'tools', 'settings', 'nbt'].includes(comp as string)) {
                       bestTabSetId = node.getId();
                       break;
                   }

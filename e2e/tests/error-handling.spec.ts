@@ -45,7 +45,7 @@ test.describe('Error Handling', () => {
     const paletteTab = page.locator('.flexlayout__tab_button').filter({ hasText: 'Palette' }).first();
     await paletteTab.click();
     // The palette panel content should show "No file loaded"
-    await expect(page.locator('.flexlayout__tab').filter({ hasText: 'No file loaded' })).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.flexlayout__tab').filter({ hasText: 'No file loaded' }).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('NBT tab is clickable and activates', async ({ page }) => {

@@ -23,8 +23,9 @@ interface DeepslateViewerProps {
   litematic: Schematic | null;
   unpackingMethod?: 'spanning' | 'non-spanning';
   onHoverBlock?: (block: { x: number, y: number, z: number, name: string } | null) => void;
-  onBlockClick?: (x: number, y: number, z: number, shiftKey: boolean) => void;
+  onBlockInteract?: (x: number, y: number, z: number, shiftKey: boolean) => void;
   selectedBlocks?: Set<string>;
+  activeTool?: string;
   /** Incremented after batch edits to trigger a full GPU buffer rebuild. */
   structureVersion?: number;
 }
@@ -58,7 +59,7 @@ function getChunkPos(x: number, y: number, z: number): [number, number, number] 
   ];
 }
 
-export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlock, onBlockClick, selectedBlocks, structureVersion }: DeepslateViewerProps) {
+export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlock, onBlockInteract, selectedBlocks, activeTool, structureVersion }: DeepslateViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<StructureRenderer | null>(null);
   const lineRendererRef = useRef<LineRenderer | null>(null);
@@ -74,8 +75,8 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
   const lastHoveredBlockRef = useRef<{ x: number, y: number, z: number } | null>(null);
   const onHoverBlockRef = useRef(onHoverBlock);
   onHoverBlockRef.current = onHoverBlock;
-  const onBlockClickRef = useRef(onBlockClick);
-  onBlockClickRef.current = onBlockClick;
+  const onBlockClickRef = useRef(onBlockInteract);
+  onBlockClickRef.current = onBlockInteract;
 
   const resourcesRef = useRef<Resources & ItemRendererResources | null>(null);
   const [loading, setLoading] = useState(true);
@@ -509,8 +510,13 @@ export default function DeepslateViewer({ litematic, unpackingMethod, onHoverBlo
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       />
-      <div style={{position: 'absolute', bottom: 10, left: 10, color: '#aaa', fontSize: '0.8rem'}}>
-        Deepslate Renderer | LMB: Select | Shift+LMB: Multi-select | RMB+Drag: Rotate | Scroll: Zoom | WASD: Move
+      <div className="viewport-overlay-hint" style={{position: 'absolute', bottom: 10, left: 10, color: '#aaa', fontSize: '0.8rem'}}>
+        {activeTool === 'select' && 'Select: Click | Shift+Click multi | Drag: Rotate | Scroll: Zoom | WASD: Move'}
+        {activeTool === 'place' && 'Place: Click | Drag: Rotate | Scroll: Zoom | WASD: Move'}
+        {activeTool === 'erase' && 'Erase: Click | Drag: Rotate | Scroll: Zoom | WASD: Move'}
+        {activeTool === 'fill' && 'Fill: Click | Drag: Rotate | Scroll: Zoom | WASD: Move'}
+        {activeTool === 'pick' && 'Pick: Click to sample | Drag: Rotate | Scroll: Zoom | WASD: Move'}
+        {!activeTool && 'Drag: Rotate | Scroll: Zoom | WASD: Move'}
       </div>
     </div>
   );

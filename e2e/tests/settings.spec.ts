@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, uploadFixture } from '../utils/test-helpers';
+import { waitForAppReady, uploadFixture, switchToTab } from '../utils/test-helpers';
 
 test.describe('Settings Panel', () => {
   test.beforeEach(async ({ page }) => {
     await waitForAppReady(page);
+    await switchToTab(page, 'Settings');
   });
 
   test('settings panel has renderer, unpacking, and traversal selects', async ({ page }) => {
