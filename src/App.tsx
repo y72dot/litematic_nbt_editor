@@ -391,12 +391,22 @@ function App() {
 
   // ── Edit handlers ────────────────────────────────────────────
 
-  const handleEditClick = (x: number, y: number, z: number) => {
+  const handleEditClick = (x: number, y: number, z: number, nx: number, ny: number, nz: number) => {
     if (!litematicObj) return;
     if (!isInSelection(x, y, z)) return; // selection constraint
 
     switch (editMode) {
-      case 'place':
+      case 'place': {
+        // Face placement: place on the face exterior (air only)
+        const px = x + nx;
+        const py = y + ny;
+        const pz = z + nz;
+        const target = litematicObj.getBlock(px, py, pz);
+        if (target && target.Name !== 'minecraft:air') return;
+        handleSetBlock(px, py, pz, activeBlockType);
+        break;
+      }
+      case 'replace':
         handleSetBlock(x, y, z, activeBlockType);
         break;
       case 'erase':
@@ -737,10 +747,6 @@ function App() {
           <ToolPanel
             interactionMode={interactionMode}
             onInteractionModeChange={setInteractionMode}
-            selectionMode={selectionMode}
-            onSelectionModeChange={setSelectionMode}
-            selectionModifier={selectionModifier}
-            onSelectionModifierChange={setSelectionModifier}
             editMode={editMode}
             onEditModeChange={setEditMode}
             activeBlockType={activeBlockType}
@@ -752,9 +758,14 @@ function App() {
       case 'selection':
         return (
           <SelectionPanel
+            interactionMode={interactionMode}
+            onInteractionModeChange={setInteractionMode}
+            selectionMode={selectionMode}
+            onSelectionModeChange={setSelectionMode}
+            selectionModifier={selectionModifier}
+            onSelectionModifierChange={setSelectionModifier}
             selectionCount={selectedBlocks.size}
             boundingBox={selectionBBox}
-            interactionMode={interactionMode}
             onSelectAll={handleSelectAll}
             onDeselectAll={handleDeselectAll}
             onSelectSimilar={handleSelectSimilar}

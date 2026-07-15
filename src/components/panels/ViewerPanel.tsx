@@ -26,7 +26,7 @@ interface ViewerPanelProps {
   onBoxSelectStart?: (x: number, y: number, z: number) => void;
   onBoxSelectUpdate?: (x: number, y: number, z: number) => void;
   onBoxSelectEnd?: () => void;
-  onEditClick?: (x: number, y: number, z: number) => void;
+  onEditClick?: (x: number, y: number, z: number, normalX: number, normalY: number, normalZ: number) => void;
 
   structureVersion?: number;
 }

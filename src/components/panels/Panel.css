@@ -85,6 +85,9 @@
 .tool-grid.tool-grid-4 {
   grid-template-columns: repeat(4, 1fr);
 }
+.tool-grid.tool-grid-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
 .tool-btn {
   display: flex;
   flex-direction: column;

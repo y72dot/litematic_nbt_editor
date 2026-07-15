@@ -1,14 +1,10 @@
 import { useState, useRef, useMemo, useCallback } from 'react'
-import type { InteractionMode, SelectionMode, SelectionModifier, EditMode } from '../../types'
+import type { InteractionMode, EditMode } from '../../types'
 import type { Schematic } from '../../core/Schematic'
 
 interface ToolPanelProps {
   interactionMode: InteractionMode
   onInteractionModeChange: (mode: InteractionMode) => void
-  selectionMode: SelectionMode
-  onSelectionModeChange: (mode: SelectionMode) => void
-  selectionModifier: SelectionModifier
-  onSelectionModifierChange: (mod: SelectionModifier) => void
   editMode: EditMode
   onEditModeChange: (mode: EditMode) => void
   activeBlockType: string
@@ -17,20 +13,9 @@ interface ToolPanelProps {
   getBlockColor: (blockId: string) => string
 }
 
-const SELECTION_TOOLS: { id: SelectionMode; label: string; icon: string; hint: string }[] = [
-  { id: 'point', label: 'Point', icon: '\u229F', hint: 'Click to select a single block' },
-  { id: 'box', label: 'Box', icon: '\u25A6', hint: 'Drag to box-select blocks' },
-  { id: 'similar', label: 'Similar', icon: '\u2630', hint: 'Select all blocks of the same type' },
-]
-
-const MODIFIERS: { id: SelectionModifier; label: string; hint: string }[] = [
-  { id: 'replace', label: 'Replace', hint: 'Replace current selection' },
-  { id: 'add', label: 'Add', hint: 'Add to current selection' },
-  { id: 'subtract', label: 'Subtract', hint: 'Remove from current selection' },
-]
-
 const EDIT_TOOLS: { id: EditMode; label: string; icon: string; hint: string }[] = [
-  { id: 'place', label: 'Place', icon: '\u25A0', hint: 'Place active block' },
+  { id: 'place', label: 'Place', icon: '\u25A0', hint: 'Place on face (air only)' },
+  { id: 'replace', label: 'Replace', icon: '\u25C6', hint: 'Replace any block' },
   { id: 'erase', label: 'Erase', icon: '\u2205', hint: 'Erase (set to air)' },
   { id: 'fill', label: 'Fill', icon: '\u25A6', hint: 'Flood-fill connected area' },
   { id: 'pick', label: 'Pick', icon: '\u21F1', hint: 'Pick block type from scene' },
@@ -38,8 +23,6 @@ const EDIT_TOOLS: { id: EditMode; label: string; icon: string; hint: string }[] 
 
 export default function ToolPanel({
   interactionMode, onInteractionModeChange,
-  selectionMode, onSelectionModeChange,
-  selectionModifier, onSelectionModifierChange,
   editMode, onEditModeChange,
   activeBlockType, onBlockTypeChange,
   litematicObj, getBlockColor,
@@ -104,64 +87,23 @@ export default function ToolPanel({
         </div>
       </div>
 
-      {/* Selection Sub-tools — only when in selection mode */}
-      {interactionMode === 'selection' && (
-        <>
-          <div>
-            <div className="studio-label" style={{ marginBottom: '4px' }}>SELECTION TOOLS</div>
-            <div className="tool-grid tool-grid-3">
-              {SELECTION_TOOLS.map(t => (
-                <button
-                  key={t.id}
-                  className={`tool-btn ${selectionMode === t.id ? 'active' : ''}`}
-                  title={t.hint}
-                  onClick={() => onSelectionModeChange(t.id)}
-                >
-                  <span className="tool-icon">{t.icon}</span>
-                  <span className="tool-label">{t.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="studio-label" style={{ marginBottom: '4px' }}>MODIFIER</div>
-            <div className="tool-grid tool-grid-3">
-              {MODIFIERS.map(m => (
-                <button
-                  key={m.id}
-                  className={`tool-btn modifier-btn ${selectionModifier === m.id ? 'active' : ''}`}
-                  title={m.hint}
-                  onClick={() => onSelectionModifierChange(m.id)}
-                >
-                  <span className="tool-label">{m.label}</span>
-                </button>
-              ))}
-            </div>
-            <div className="keyboard-hint">Ctrl+Click = Add | Alt+Click = Subtract</div>
-          </div>
-        </>
-      )}
-
-      {/* Editing Sub-tools — only when in editing mode */}
-      {interactionMode === 'editing' && (
-        <div>
-          <div className="studio-label" style={{ marginBottom: '4px' }}>EDITING TOOLS</div>
-          <div className="tool-grid tool-grid-4">
-            {EDIT_TOOLS.map(t => (
-              <button
-                key={t.id}
-                className={`tool-btn ${editMode === t.id ? 'active' : ''}`}
-                title={t.hint}
-                onClick={() => onEditModeChange(t.id)}
-              >
-                <span className="tool-icon">{t.icon}</span>
-                <span className="tool-label">{t.label}</span>
-              </button>
-            ))}
-          </div>
+      {/* Editing Tools — always visible */}
+      <div>
+        <div className="studio-label" style={{ marginBottom: '4px' }}>EDITING TOOLS</div>
+        <div className="tool-grid tool-grid-5">
+          {EDIT_TOOLS.map(t => (
+            <button
+              key={t.id}
+              className={`tool-btn ${editMode === t.id ? 'active' : ''}`}
+              title={t.hint}
+              onClick={() => onEditModeChange(t.id)}
+            >
+              <span className="tool-icon">{t.icon}</span>
+              <span className="tool-label">{t.label}</span>
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       {/* Active Block — always visible */}
       <div>

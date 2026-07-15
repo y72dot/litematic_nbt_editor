@@ -6,7 +6,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { LineRenderer } from '../utils/LineRenderer';
 import { FilledBoxRenderer } from '../utils/FilledBoxRenderer';
 import { useBlockRaycast } from '../hooks/useBlockRaycast';
-import type { InteractionMode, SelectionMode, BoxSelectionState } from '../types';
+import type { InteractionMode, SelectionMode, EditMode, BoxSelectionState } from '../types';
 
 // Import assets
 // @ts-ignore
@@ -34,7 +34,7 @@ interface DeepslateViewerProps {
   onBoxSelectStart?: (x: number, y: number, z: number) => void;
   onBoxSelectUpdate?: (x: number, y: number, z: number) => void;
   onBoxSelectEnd?: () => void;
-  onEditClick?: (x: number, y: number, z: number) => void;
+  onEditClick?: (x: number, y: number, z: number, normalX: number, normalY: number, normalZ: number) => void;
   /** Incremented after batch edits to trigger a full GPU buffer rebuild. */
   structureVersion?: number;
 }
@@ -91,7 +91,7 @@ export default function DeepslateViewer({
   const minOffsetRef = useRef<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
 
   // Throttle state updates
-  const lastHoveredBlockRef = useRef<{ x: number, y: number, z: number } | null>(null);
+  const lastHoveredBlockRef = useRef<{ x: number, y: number, z: number, normalX: number, normalY: number, normalZ: number } | null>(null);
   const onHoverBlockRef = useRef(onHoverBlock);
   onHoverBlockRef.current = onHoverBlock;
 
@@ -490,7 +490,7 @@ export default function DeepslateViewer({
 
             const last = lastHoveredBlockRef.current;
             if (!last || last.x !== hx || last.y !== hy || last.z !== hz) {
-              lastHoveredBlockRef.current = { x: hx, y: hy, z: hz };
+              lastHoveredBlockRef.current = { x: hx, y: hy, z: hz, normalX: hit.normal[0], normalY: hit.normal[1], normalZ: hit.normal[2] };
 
               let name = 'Unknown Block';
               if (litematic) {
@@ -622,7 +622,7 @@ export default function DeepslateViewer({
           if (interactionModeRef.current === 'selection') {
             onSelectionClickRef.current?.(gx, gy, gz, e.ctrlKey || e.metaKey, e.altKey);
           } else if (interactionModeRef.current === 'editing') {
-            onEditClickRef.current?.(gx, gy, gz);
+            onEditClickRef.current?.(gx, gy, gz, hovered.normalX, hovered.normalY, hovered.normalZ);
           }
         }
       }

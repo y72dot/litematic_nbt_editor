@@ -251,18 +251,10 @@ html, body, #root {
   width: 100%; /* Override previous width */
 }
 
-/* Scrollbar Styling */
+/* Hide scrollbars globally while keeping scroll functionality */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  display: none;
 }
-::-webkit-scrollbar-track {
-  background: #2b2b2b; 
-}
-::-webkit-scrollbar-thumb {
-  background: #555; 
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #777; 
+* {
+  scrollbar-width: none;
 }

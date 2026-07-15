@@ -3,7 +3,7 @@ export type InteractionMode = 'selection' | 'editing';
 export type SelectionMode = 'point' | 'box' | 'similar';
 export type SelectionModifier = 'replace' | 'add' | 'subtract';
 
-export type EditMode = 'place' | 'erase' | 'fill' | 'pick';
+export type EditMode = 'place' | 'replace' | 'erase' | 'fill' | 'pick';
 
 export interface BoxSelectionState {
   active: boolean
