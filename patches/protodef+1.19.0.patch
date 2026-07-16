@@ -1,0 +1,19 @@
+diff --git a/node_modules/protodef/src/compiler.js b/node_modules/protodef/src/compiler.js
+index 9c8f057..5356785 100644
+--- a/node_modules/protodef/src/compiler.js
++++ b/node_modules/protodef/src/compiler.js
+@@ -256,10 +256,12 @@ class Compiler {
+    * @param {*} code
+    */
+   compile (code) {
+-    // Local variable to provide some context to eval()
++    // Use new Function() with explicit parameters instead of eval()
++    // to prevent bundler/minifier from removing the native variable,
++    // which is only referenced inside the generated code string.
+     const native = this.native // eslint-disable-line
+     const { PartialReadError } = require('./utils') // eslint-disable-line
+-    return eval(code)() // eslint-disable-line
++    return new Function('native', 'PartialReadError', 'return (' + code + ')()')(native, PartialReadError) // eslint-disable-line
+   }
+ }
+ 
