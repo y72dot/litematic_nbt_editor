@@ -1004,6 +1004,13 @@ function App() {
         />
       </div>
 
+      {/* 4. ICP Footer */}
+      <div style={{ flex: '0 0 22px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#222', borderTop: '1px solid #444', fontSize: '11px', gap: '8px' }}>
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" style={{ color: '#888', textDecoration: 'none' }}>浙ICP备2026056758号-1</a>
+        <img src="https://www.beian.gov.cn/img/ghs.png" style={{ width: '12px', verticalAlign: 'text-bottom' }} />
+        <a href="http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=33011002020155" target="_blank" rel="noopener" style={{ color: '#888', textDecoration: 'none' }}>浙公网安备33011002020155号</a>
+      </div>
+
     </div>
   )
 }
